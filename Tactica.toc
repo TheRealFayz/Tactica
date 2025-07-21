@@ -1,0 +1,7 @@
+## Interface: 11200
+## Title: Tactica
+## Notes: Boss tactics announcer via /tt
+## Author: Doite
+## SavedVariables: TacticaDB
+
+Tactica.lua
