@@ -2,7 +2,7 @@
 Raid boss tactic announcer for Turtle Wow, that allows you to share strategies with fellow raiders. Includes over 60+ default raid tactics for all Turtle WoW raid content.
 
 ## How to Use
-The addon can be controlled through slash commands. The primary commands are `/tt` or `/tactica`, which will list available commands.
+The addon will automatically show the post UI/frame when targeting a raid boss (move & lock/unlock available via "L"/"U" symbol to the top-right). It can be controlled more advanced through slash commands. The primary commands are `/tt` or `/tactica`, which will list available commands.
 Other commandes are:
 
 ### Post/announce raid tactics
