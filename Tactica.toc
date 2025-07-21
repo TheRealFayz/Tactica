@@ -4,5 +4,6 @@
 ## Notes: Raid Boss Tactics Announcer [/tt]
 ## Author: Doite
 ## SavedVariables: TacticaDB
+## SavedVariablesPerCharacter: TacticaPerCharDB
 
 Tactica.lua
