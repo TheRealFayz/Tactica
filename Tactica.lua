@@ -1,5 +1,4 @@
 -- Tactica.lua - Boss strategy helper for Turtle WoW
--- Things to fix saves, remove, post defaults
 -- Created by Doite
 
 Tactica = {
@@ -7,6 +6,7 @@ Tactica = {
     Data = {},
     DefaultData = {},
     addFrame = nil,
+    postFrame = nil,
     selectedRaid = nil,
     selectedBoss = nil
 };
@@ -66,98 +66,62 @@ end
 -- INITIALIZATION
 -------------------------------------------------
 
+-- Initialize the addon
 local f = CreateFrame("Frame");
 f:RegisterEvent("ADDON_LOADED");
 f:RegisterEvent("PLAYER_LOGIN");
-f:SetScript("OnEvent", function()
+f:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == "Tactica" then
-        -- Initialize account-wide settings if they don't exist
-        if not Tactica_SavedVariables then
-            Tactica_SavedVariables = {
-                version = Tactica.SavedVariablesVersion,
-                Settings = {
-                    UseRaidWarning = true,
-                    UseRaidChat = true,
-                    UsePartyChat = false,
-                    PopupScale = 1.0
+        -- Initialize saved variables
+        TacticaDB = TacticaDB or {
+            version = Tactica.SavedVariablesVersion,
+            CustomTactics = {},
+            Settings = {
+                UseRaidWarning = true,
+                UseRaidChat = true,
+                UsePartyChat = false,
+                PopupScale = 1.0,
+                PostFrame = {
+                    locked = false,
+                    position = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = 0 }
                 }
-            };
-        else
-            -- Migrate old data if needed
+            }
+        };
+        
+        -- Migration from old variables if needed
+        if Tactica_SavedVariables then
             if Tactica_SavedVariables.CustomTactics then
-                if not Tactica_SavedVariablesPerChar then
-                    Tactica_SavedVariablesPerChar = {
-                        version = Tactica.SavedVariablesVersion,
-                        CustomTactics = {}
-                    };
-                end
-                -- Move custom tactics to per-character storage
-                Tactica_SavedVariablesPerChar.CustomTactics = Tactica_SavedVariables.CustomTactics
-                Tactica_SavedVariables.CustomTactics = nil
+                TacticaDB.CustomTactics = Tactica_SavedVariables.CustomTactics
             end
+            if Tactica_SavedVariables.Settings then
+                TacticaDB.Settings = Tactica_SavedVariables.Settings
+            end
+            Tactica_SavedVariables = nil
         end
         
-        -- Initialize per-character tactics if they don't exist
-        if not Tactica_SavedVariablesPerChar then
-            Tactica_SavedVariablesPerChar = {
-                version = Tactica.SavedVariablesVersion,
-                CustomTactics = {}
-            };
-        end
-        
-        -- Ensure versions are current
-        Tactica_SavedVariables.version = Tactica.SavedVariablesVersion;
-        Tactica_SavedVariablesPerChar.version = Tactica.SavedVariablesVersion;
-        
-        -- Ensure all tables exist
-        Tactica_SavedVariables.Settings = Tactica_SavedVariables.Settings or {
-            UseRaidWarning = true,
-            UseRaidChat = true,
-            UsePartyChat = false,
-            PopupScale = 1.0
-        }
-        
-        Tactica_SavedVariablesPerChar.CustomTactics = Tactica_SavedVariablesPerChar.CustomTactics or {}
-
         DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r.");
 
     elseif event == "PLAYER_LOGIN" then
-        if Tactica and Tactica.InitializeData then
-            Tactica:InitializeData();
-            Tactica:CreateAddFrame();
-        end
+        Tactica:InitializeData();
+        Tactica:CreateAddFrame();
+        Tactica:CreatePostFrame();
     end
 end);
 
--- Slash command registration
+-- Slash commands
 SLASH_TACTICA1 = "/tactica";
 SLASH_TACTICA2 = "/tt";
 SlashCmdList["TACTICA"] = function(msg)
-    if Tactica and Tactica.CommandHandler then
-        Tactica:CommandHandler(msg);
-    end
+    Tactica:CommandHandler(msg);
 end
 
 function Tactica:InitializeData()
+    -- Initialize empty data tables
     self.Data = {}
+    TacticaDB.CustomTactics = TacticaDB.CustomTactics or {}
     
     -- First load all default data
     for raidName, bosses in pairs(self.DefaultData) do
-        self.Data[raidName] = self.Data[raidName] or {}
-        for bossName, tactics in pairs(bosses) do
-            -- Only add default tactics if no custom tactics exist for this boss (UNTESTED)
-            if not (Tactica_SavedVariablesPerChar.CustomTactics[raidName] and 
-                   Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName]) then
-                self.Data[raidName][bossName] = self.Data[raidName][bossName] or {}
-                for tacticName, text in pairs(tactics) do
-                    self.Data[raidName][bossName][tacticName] = text
-                end
-            end
-        end
-    end
-    
-    -- Then merge all custom tactics (overwriting defaults where they exist - UNTESTED)
-    for raidName, bosses in pairs(Tactica_SavedVariablesPerChar.CustomTactics) do
         self.Data[raidName] = self.Data[raidName] or {}
         for bossName, tactics in pairs(bosses) do
             self.Data[raidName][bossName] = self.Data[raidName][bossName] or {}
@@ -166,11 +130,20 @@ function Tactica:InitializeData()
             end
         end
     end
+    
+    -- Then merge all custom tactics
+    for raidName, bosses in pairs(TacticaDB.CustomTactics) do
+        self.Data[raidName] = self.Data[raidName] or {}
+        for bossName, tactics in pairs(bosses) do
+            self.Data[raidName][bossName] = self.Data[raidName][bossName] or {}
+            for tacticName, text in pairs(tactics) do
+                if text and text ~= "" then  -- Only add if text exists
+                    self.Data[raidName][bossName][tacticName] = text
+                end
+            end
+        end
+    end
 end
-
--------------------------------------------------
--- SLASH COMMANDS
--------------------------------------------------
 
 function Tactica:CommandHandler(msg)
     local args = self:GetArgs(msg);
@@ -205,22 +178,18 @@ function Tactica:CommandHandler(msg)
     end
 end
 
--------------------------------------------------
--- TACTIC FUNCTIONS
--------------------------------------------------
-
 function Tactica:PostTactic(raidName, bossName, tacticName)
     local tacticText = self:FindTactic(raidName, bossName, tacticName);
     
     if tacticText then
-        if Tactica_SavedVariables.Settings.UseRaidWarning then
+        if TacticaDB.Settings.UseRaidWarning then
             SendChatMessage("--- "..string.upper(bossName or "DEFAULT").." STRATEGY (read chat) ---", "RAID_WARNING");
         end
         
         local chatType = "RAID";
         if not IsInRaid() then
             chatType = IsInGroup() and "PARTY" or "SAY";
-        elseif not Tactica_SavedVariables.Settings.UseRaidChat then
+        elseif not TacticaDB.Settings.UseRaidChat then
             chatType = "PARTY";
         end
         
@@ -235,51 +204,44 @@ end
 function Tactica:FindTactic(raidName, bossName, tacticName)
     if not raidName or not bossName then return nil end
     
-    -- First check custom tactics in self.Data
-    if self.Data then
-        for rName, bosses in pairs(self.Data) do
-            if self:StringsEqual(rName, raidName) then
-                for bName, tactics in pairs(bosses) do
-                    if self:StringsEqual(bName, bossName) then
-                        if not tacticName or tacticName == "" then
-                            for _, text in pairs(tactics) do
-                                return text;
-                            end
-                        else
-                            for tName, text in pairs(tactics) do
-                                if self:StringsEqual(tName, tacticName) then
-                                    return text;
-                                end
-                            end
-                        end
-                    end
+    raidName = self:StandardizeName(raidName)
+    bossName = self:StandardizeName(bossName)
+    tacticName = tacticName and self:StandardizeName(tacticName) or nil
+    
+    -- First check custom tactics
+    if TacticaDB.CustomTactics[raidName] and 
+       TacticaDB.CustomTactics[raidName][bossName] then
+        if not tacticName or tacticName == "" then
+            -- Return the first tactic found if none specified
+            for _, text in pairs(TacticaDB.CustomTactics[raidName][bossName]) do
+                if text and text ~= "" then
+                    return text
                 end
+            end
+        else
+            -- Return specific tactic if found
+            if TacticaDB.CustomTactics[raidName][bossName][tacticName] then
+                return TacticaDB.CustomTactics[raidName][bossName][tacticName]
             end
         end
     end
     
     -- If not found in custom data, check default data
-    for rName, bosses in pairs(self.DefaultData) do
-        if self:StringsEqual(rName, raidName) then
-            for bName, tactics in pairs(bosses) do
-                if self:StringsEqual(bName, bossName) then
-                    if not tacticName or tacticName == "" then
-                        for _, text in pairs(tactics) do
-                            return text;
-                        end
-                    else
-                        for tName, text in pairs(tactics) do
-                            if self:StringsEqual(tName, tacticName) then
-                                return text;
-                            end
-                        end
-                    end
-                end
+    if self.DefaultData[raidName] and self.DefaultData[raidName][bossName] then
+        if not tacticName or tacticName == "" then
+            -- Return the first tactic found if none specified
+            for _, text in pairs(self.DefaultData[raidName][bossName]) do
+                return text
+            end
+        else
+            -- Return specific tactic if found
+            if self.DefaultData[raidName][bossName][tacticName] then
+                return self.DefaultData[raidName][bossName][tacticName]
             end
         end
     end
     
-    return nil;
+    return nil
 end
 
 function Tactica:AddTactic(raidName, bossName, tacticName, tacticText)
@@ -293,56 +255,50 @@ function Tactica:AddTactic(raidName, bossName, tacticName, tacticText)
     end
     
     -- Initialize tables if they don't exist
-    Tactica_SavedVariablesPerChar.CustomTactics[raidName] = Tactica_SavedVariablesPerChar.CustomTactics[raidName] or {};
-    Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName] = Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName] or {};
+    TacticaDB.CustomTactics[raidName] = TacticaDB.CustomTactics[raidName] or {};
+    TacticaDB.CustomTactics[raidName][bossName] = TacticaDB.CustomTactics[raidName][bossName] or {};
     
     -- Save the tactic
-    Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName][tacticName] = tacticText;
+    TacticaDB.CustomTactics[raidName][bossName][tacticName] = tacticText;
     
     -- Update the in-memory data
     self.Data[raidName] = self.Data[raidName] or {};
     self.Data[raidName][bossName] = self.Data[raidName][bossName] or {};
     self.Data[raidName][bossName][tacticName] = tacticText;
     
-    -- Force save to disk
-    self:SaveVariables();
-    
     return true;
 end
 
 function Tactica:RemoveTactic(raidName, bossName, tacticName)
-    -- Basic validation
     if not raidName or not bossName then
         self:PrintError("Usage: /tt remove <Raid>,<Boss>,<Tactic>");
         return false;
     end
     
-    -- Standardize names
     raidName = self:StandardizeName(raidName);
     bossName = self:StandardizeName(bossName);
     tacticName = tacticName and self:StandardizeName(tacticName) or nil;
     
-    -- Check if the tactic exists
-    if not (Tactica_SavedVariablesPerChar.CustomTactics[raidName] and 
-            Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName]) then
+    if not (TacticaDB.CustomTactics[raidName] and 
+            TacticaDB.CustomTactics[raidName][bossName]) then
         self:PrintError("No custom tactics found for "..bossName.." in "..raidName);
         return false;
     end
     
     -- Remove specific tactic or all tactics for boss
     if tacticName then
-        if not Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName][tacticName] then
+        if not TacticaDB.CustomTactics[raidName][bossName][tacticName] then
             self:PrintError("Tactic '"..tacticName.."' not found for "..bossName);
             return false;
         end
-        Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName][tacticName] = nil;
+        TacticaDB.CustomTactics[raidName][bossName][tacticName] = nil;
     else
-        Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName] = nil;
+        TacticaDB.CustomTactics[raidName][bossName] = nil;
     end
     
     -- Clean up empty tables
-    if next(Tactica_SavedVariablesPerChar.CustomTactics[raidName] or {}) == nil then
-        Tactica_SavedVariablesPerChar.CustomTactics[raidName] = nil;
+    if next(TacticaDB.CustomTactics[raidName] or {}) == nil then
+        TacticaDB.CustomTactics[raidName] = nil;
     end
     
     -- Update in-memory data
@@ -356,25 +312,34 @@ function Tactica:RemoveTactic(raidName, bossName, tacticName)
         end
     end
     
-    -- Save changes
-    self:SaveVariables();
-    
     self:PrintMessage("Successfully removed "..
         (tacticName and ("tactic '"..tacticName.."'") or "all tactics")..
         " for "..bossName.." in "..raidName);
     return true;
 end
 
--------------------------------------------------
--- UTILITY FUNCTIONS
--------------------------------------------------
+-- Post Frame Lock/Position Handling
+function Tactica:SavePostFramePosition()
+    if not self.postFrame then return end
+    
+    local point, _, relativePoint, x, y = self.postFrame:GetPoint()
+    TacticaDB.Settings.PostFrame.position = {
+        point = point,
+        relativeTo = "UIParent",
+        relativePoint = relativePoint,
+        x = x,
+        y = y
+    }
+    TacticaDB.Settings.PostFrame.locked = self.postFrame.locked
+end
 
-function Tactica:SaveVariables()
-    self:PrintMessage("Saving variables...");
-    if SaveVariables then
-        SaveVariables("Tactica_SavedVariables", "Tactica_SavedVariablesPerChar");
-    end
-    self:PrintMessage("Variables saved.");
+function Tactica:RestorePostFramePosition()
+    if not self.postFrame or not TacticaDB.Settings.PostFrame then return end
+    
+    local pos = TacticaDB.Settings.PostFrame.position
+    self.postFrame:ClearAllPoints()
+    self.postFrame:SetPoint(pos.point, pos.relativeTo, pos.relativePoint, pos.x, pos.y)
+    self.postFrame.locked = TacticaDB.Settings.PostFrame.locked
 end
 
 function Tactica:StringsEqual(a, b)
@@ -404,13 +369,14 @@ function Tactica:ResolveAlias(input)
     return self.Aliases[key] or input
 end
 
-
 function Tactica:PrintHelp()
     self:PrintMessage("Tactica Commands:");
     self:PrintMessage("  |cffffff00/tt <Raid>,<Boss>,[Tactic]|r");
     self:PrintMessage("    - Posts a tactic with header to Raid Warning and each line to Raid.");
     self:PrintMessage("  |cffffff00/tt add|r");
     self:PrintMessage("    - Opens a popup to add a custom tactic.");
+    self:PrintMessage("  |cffffff00/tt post|r");
+    self:PrintMessage("    - Opens a popup to select and post a tactic.");
     self:PrintMessage("  |cffffff00/tt remove <Raid>,<Boss>,<Tactic>|r");
     self:PrintMessage("    - Removes a tactic from memory.");
     self:PrintMessage("  |cffffff00/tt list|r");
@@ -433,7 +399,7 @@ function Tactica:ListAvailableTactics()
     end
     
     -- Merge custom data
-    for raidName, bosses in pairs(Tactica_SavedVariablesPerChar.CustomTactics or {}) do
+    for raidName, bosses in pairs(TacticaDB.CustomTactics or {}) do
         combinedData[raidName] = combinedData[raidName] or {};
         for bossName, tactics in pairs(bosses) do
             combinedData[raidName][bossName] = combinedData[raidName][bossName] or {};
@@ -454,12 +420,11 @@ function Tactica:ListAvailableTactics()
                 if tactics and next(tactics) then
                     self:PrintMessage("  |cff00ffff"..bossName.."|r");
                     for tacticName in pairs(tactics) do
-    if tacticName ~= "Default" then
-        self:PrintMessage("    - "..tacticName);
-        count = count + 1;
-    end
-end
-
+                        if tacticName ~= "Default" then
+                            self:PrintMessage("    - "..tacticName);
+                            count = count + 1;
+                        end
+                    end
                 end
             end
         end
@@ -502,13 +467,13 @@ function Tactica:UpdateBossDropdown(raidName)
     end
     
     -- Add bosses from custom data
-    if Tactica_SavedVariablesPerChar.CustomTactics[raidName] then
-        for bossName in pairs(Tactica_SavedVariablesPerChar.CustomTactics[raidName]) do
+    if TacticaDB.CustomTactics[raidName] then
+        for bossName in pairs(TacticaDB.CustomTactics[raidName]) do
             bosses[bossName] = true
         end
     end
     
-    -- Initialize boss dropdown (copied from post frame with local variable fix)
+    -- Initialize boss dropdown
     UIDropDownMenu_Initialize(bossDropdown, function()
         for bossName in pairs(bosses) do
             local bossName = bossName -- Local copy for closure
@@ -566,45 +531,44 @@ function Tactica:CreateAddFrame()
 
     -- Initialize dropdowns
     f:SetScript("OnShow", function()
-    -- Initialize raid dropdown
-		UIDropDownMenu_Initialize(raidDropdown, function()
-			local raids = {
-				"Molten Core", "Blackwing Lair", "Zul'Gurub",
-				"Ruins of Ahn'Qiraj", "Temple of Ahn'Qiraj",
-				"Onyxia's Lair", "Emerald Sanctum", "Naxxramas",
-				"Lower Karazhan Halls", "Upper Karazhan Halls", "World Bosses"
-			}
+        -- Initialize raid dropdown
+        UIDropDownMenu_Initialize(raidDropdown, function()
+            local raids = {
+                "Molten Core", "Blackwing Lair", "Zul'Gurub",
+                "Ruins of Ahn'Qiraj", "Temple of Ahn'Qiraj",
+                "Onyxia's Lair", "Emerald Sanctum", "Naxxramas",
+                "Lower Karazhan Halls", "Upper Karazhan Halls", "World Bosses"
+            }
 
-			for _, raidName in ipairs(raids) do
-				local raidName = raidName -- Local copy for closure
-				local info = {
-					text = raidName,
-					func = function()
-						Tactica.selectedRaid = raidName
-						UIDropDownMenu_SetText(raidName, TacticaRaidDropdown)
-						Tactica:UpdateBossDropdown(raidName)
-					end
-				}
-				UIDropDownMenu_AddButton(info)
-			end
-		end)
-		
-		-- Set initial raid text (respecting any selection that might have been set before showing)
-		if Tactica.selectedRaid then
-			UIDropDownMenu_SetText(Tactica.selectedRaid, TacticaRaidDropdown)
-			Tactica:UpdateBossDropdown(Tactica.selectedRaid)
-		else
-			UIDropDownMenu_SetText("Select Raid", TacticaRaidDropdown)
-		end
-		
-		-- Set initial boss text
-		if Tactica.selectedBoss then
-			UIDropDownMenu_SetText(Tactica.selectedBoss, TacticaBossDropdown)
-		else
-			UIDropDownMenu_SetText("Select Boss", TacticaBossDropdown)
-		end
-	end)
-
+            for _, raidName in ipairs(raids) do
+                local raidName = raidName -- Local copy for closure
+                local info = {
+                    text = raidName,
+                    func = function()
+                        Tactica.selectedRaid = raidName
+                        UIDropDownMenu_SetText(raidName, TacticaRaidDropdown)
+                        Tactica:UpdateBossDropdown(raidName)
+                    end
+                }
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+        
+        -- Set initial raid text (respecting any selection that might have been set before showing)
+        if Tactica.selectedRaid then
+            UIDropDownMenu_SetText(Tactica.selectedRaid, TacticaRaidDropdown)
+            Tactica:UpdateBossDropdown(Tactica.selectedRaid)
+        else
+            UIDropDownMenu_SetText("Select Raid", TacticaRaidDropdown)
+        end
+        
+        -- Set initial boss text
+        if Tactica.selectedBoss then
+            UIDropDownMenu_SetText(Tactica.selectedBoss, TacticaBossDropdown)
+        else
+            UIDropDownMenu_SetText("Select Boss", TacticaBossDropdown)
+        end
+    end)
 
     -- Tactic name
     local nameLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -722,8 +686,8 @@ function Tactica:ShowAddPopup()
     UIDropDownMenu_SetText("Select Boss", TacticaBossDropdown)
     
     -- Reset fields
-    TacticaNameEdit:SetText("")
-    TacticaDescEdit:SetText("")
+    getglobal("TacticaNameEdit"):SetText("")
+    getglobal("TacticaDescEdit"):SetText("")
     
     self.addFrame:Show()
 end
@@ -760,6 +724,7 @@ function Tactica:CreatePostFrame()
     end)
     f:SetScript("OnDragStop", function()
         f:StopMovingOrSizing()
+        Tactica:SavePostFramePosition()
     end)
     f:Hide()
     
@@ -775,14 +740,15 @@ function Tactica:CreatePostFrame()
 
     -- Lock button
     local lockButton = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    lockButton:SetWidth(20)
-    lockButton:SetHeight(20)
-    lockButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -6)
-    lockButton:SetText(f.locked and "U" or "L")
-    lockButton:SetScript("OnClick", function()
-        f.locked = not f.locked
-        lockButton:SetText(f.locked and "U" or "L")
-    end)
+	lockButton:SetWidth(20)
+	lockButton:SetHeight(20)
+	lockButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -6)
+	lockButton:SetText(f.locked and "U" or "L")  -- Fixed: "U" for Unlocked, "L" for Locked
+	lockButton:SetScript("OnClick", function()
+		f.locked = not f.locked
+		lockButton:SetText(f.locked and "U" or "L")  -- Fixed
+		Tactica:SavePostFramePosition()
+	end)
 
     -- RAID DROPDOWN
     local raidLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -852,6 +818,9 @@ function Tactica:CreatePostFrame()
         
         -- Set initial tactic text
         UIDropDownMenu_SetText("Select Tactic (opt.)", TacticaPostTacticDropdown)
+        
+        -- Restore position
+        Tactica:RestorePostFramePosition()
     end)
 
     -- Submit button
@@ -906,8 +875,8 @@ function Tactica:UpdatePostBossDropdown(raidName)
     end
     
     -- Add bosses from custom data
-    if Tactica_SavedVariablesPerChar.CustomTactics[raidName] then
-        for bossName in pairs(Tactica_SavedVariablesPerChar.CustomTactics[raidName]) do
+    if TacticaDB.CustomTactics[raidName] then
+        for bossName in pairs(TacticaDB.CustomTactics[raidName]) do
             bosses[bossName] = true
         end
     end
@@ -963,9 +932,9 @@ function Tactica:UpdatePostTacticDropdown(raidName, bossName)
         end
         
         -- Add tactics from custom data
-        if Tactica_SavedVariablesPerChar.CustomTactics[raidName] and 
-           Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName] then
-            for tacticName in pairs(Tactica_SavedVariablesPerChar.CustomTactics[raidName][bossName]) do
+        if TacticaDB.CustomTactics[raidName] and 
+           TacticaDB.CustomTactics[raidName][bossName] then
+            for tacticName in pairs(TacticaDB.CustomTactics[raidName][bossName]) do
                 if tacticName ~= "Default" then
                     local tacticName = tacticName -- Local copy for closure
                     local info = {
@@ -1004,21 +973,6 @@ function Tactica:ShowPostPopup()
     self.postFrame:Show()
 end
 
--- Update the help text to include /tt post
-function Tactica:PrintHelp()
-    self:PrintMessage("Tactica Commands:");
-    self:PrintMessage("  |cffffff00/tt <Raid>,<Boss>,[Tactic]|r");
-    self:PrintMessage("    - Posts a tactic with header to Raid Warning and each line to Raid.");
-    self:PrintMessage("  |cffffff00/tt add|r");
-    self:PrintMessage("    - Opens a popup to add a custom tactic.");
-    self:PrintMessage("  |cffffff00/tt post|r");
-    self:PrintMessage("    - Opens a popup to select and post a tactic.");
-    self:PrintMessage("  |cffffff00/tt remove <Raid>,<Boss>,<Tactic>|r");
-    self:PrintMessage("    - Removes a tactic from memory.");
-    self:PrintMessage("  |cffffff00/tt list|r");
-    self:PrintMessage("    - Lists all available tactics.");
-end
-
 -------------------------------------------------
 -- DEFAULT DATA
 -------------------------------------------------
@@ -1032,15 +986,15 @@ Tactica.DefaultData = {
             ["Default"] = "Tanks: Tank near the center of the room. Rotate Fear Ward or Tremor Totem.\nMDPS: Avoid fire patches. Move out during Panic and Frenzy.\nRDPS: Stay at max range to avoid Panic. Focus boss after Frenzy ends.\nHealers: Keep Fear Ward up. Heal through fire damage spikes.\nClass Specific: Hunters use Tranquilizing Shot to remove Frenzy.",
         },
         ["Gehennas"] = {
-            ["Default"] = "Tanks: Main tank on boss, offtanks on adds. Pull away from raid.\nMDPS: Kill adds first. Avoid standing in Rain of Fire.\nRDPS: Nuke adds, then switch to boss. Stay spread.\nHealers: Dispel Gehennas’s Curse (-75% healing) immediately.\nClass Specific: Mages and Druids focus on curse removal.",
+            ["Default"] = "Tanks: Main tank on boss, offtanks on adds. Pull away from raid.\nMDPS: Kill adds first. Avoid standing in Rain of Fire.\nRDPS: Nuke adds, then switch to boss. Stay spread.\nHealers: Dispel Gehennas's Curse (-75% healing) immediately.\nClass Specific: Mages and Druids focus on curse removal.",
         },
         ["Garr"] = {
-            ["Default"] = "Tanks: Multiple tanks on adds. Boss is immune to taunt.\nMDPS: Focus on one add at a time. Avoid AoE damage.\nRDPS: Assist with killing adds. Don’t multi-DoT all targets.\nHealers: Spread healing to tanks. Avoid AoE splash damage.\nClass Specific: Warlocks may banish adds if instructed.",
+            ["Default"] = "Tanks: Multiple tanks on adds. Boss is immune to taunt.\nMDPS: Focus on one add at a time. Avoid AoE damage.\nRDPS: Assist with killing adds. Don't multi-DoT all targets.\nHealers: Spread healing to tanks. Avoid AoE splash damage.\nClass Specific: Warlocks may banish adds if instructed.",
         },
         ["Baron Geddon"] = {
             ["Default"] = "Tanks: Tank away from raid. Move to safe zone before Ignite Mana.\nMDPS: Run out when you are Living Bomb. Stay spread otherwise.\nRDPS: Avoid clumping. Stop casting during Inferno.\nHealers: Cleanse Ignite Mana. Prepare for burst healing.\nClass Specific: Paladins use Fire Resist Aura. Everyone avoid fall damage.",
         },
-		["Sulfuron Harbinger"] = {
+        ["Sulfuron Harbinger"] = {
             ["Default"] = "Tanks: Tank adds separately. Interrupt heals.\nMDPS: Focus down adds. Help interrupt.\nRDPS: Nuke adds then boss. Stay out of cleave.\nHealers: Dispel Inspire. Heal tanks taking add damage.\nClass Specific: Priests/Mages dispel Inspire. Rogues kick heals.",
         },
         ["Golemagg the Incinerator"] = {
