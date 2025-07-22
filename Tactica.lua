@@ -267,75 +267,57 @@ end
 
 function Tactica:RemoveTactic(raidName, bossName, tacticName)
     if not raidName or not bossName then
-        self:PrintError("Usage: /tt remove <Raid>,<Boss>,<Tactic>");
-        return false;
+        self:PrintError("Usage: /tt remove <Raid>,<Boss>,<Tactic>")
+        return false
     end
-    
-    raidName = self:StandardizeName(raidName);
-    bossName = self:StandardizeName(bossName);
-    tacticName = tacticName and self:StandardizeName(tacticName) or nil;
-    
-    -- Check if the raid exists in custom tactics
+
+    raidName = self:StandardizeName(raidName)
+    bossName = self:StandardizeName(bossName)
+    tacticName = tacticName and self:StandardizeName(tacticName) or nil
+
+    -- Debug output
+    DEFAULT_CHAT_FRAME:AddMessage("|cff8888ffTactica Debug:|r Attempting to remove - Raid: "..tostring(raidName)..", Boss: "..tostring(bossName)..", Tactic: "..tostring(tacticName))
+
+    -- Verify the tactic exists in custom data
     if not TacticaDB.CustomTactics[raidName] then
-        self:PrintError("No custom tactics found for "..raidName);
-        return false;
+        self:PrintError("No custom tactics exist for raid: "..raidName)
+        return false
     end
-    
-    -- Check if the boss exists
+
     if not TacticaDB.CustomTactics[raidName][bossName] then
-        self:PrintError("No custom tactics found for "..bossName.." in "..raidName);
-        return false;
+        self:PrintError("No custom tactics exist for boss: "..bossName.." in "..raidName)
+        return false
     end
-    
-    -- Remove specific tactic or all tactics for boss
+
+    if tacticName and not TacticaDB.CustomTactics[raidName][bossName][tacticName] then
+        self:PrintError("No custom tactic named '"..tacticName.."' exists for "..bossName)
+        return false
+    end
+
+    -- Perform the removal
     if tacticName then
-        if not TacticaDB.CustomTactics[raidName][bossName][tacticName] then
-            self:PrintError("Tactic '"..tacticName.."' not found for "..bossName);
-            return false;
-        end
-        
-        -- Actually remove the tactic
-        TacticaDB.CustomTactics[raidName][bossName][tacticName] = nil;
-        
-        -- Clean up empty boss table if this was the last tactic
-        if next(TacticaDB.CustomTactics[raidName][bossName]) == nil then
-            TacticaDB.CustomTactics[raidName][bossName] = nil;
-        end
+        -- Remove specific tactic
+        TacticaDB.CustomTactics[raidName][bossName][tacticName] = nil
+        self:PrintMessage("Removed custom tactic '"..tacticName.."' for "..bossName.." in "..raidName)
     else
         -- Remove all tactics for this boss
-        TacticaDB.CustomTactics[raidName][bossName] = nil;
+        TacticaDB.CustomTactics[raidName][bossName] = nil
+        self:PrintMessage("Removed all custom tactics for "..bossName.." in "..raidName)
     end
-    
-    -- Clean up empty raid table if this was the last boss
+
+    -- Clean up empty tables
+    if next(TacticaDB.CustomTactics[raidName][bossName] or {}) == nil then
+        TacticaDB.CustomTactics[raidName][bossName] = nil
+    end
+
     if next(TacticaDB.CustomTactics[raidName] or {}) == nil then
-        TacticaDB.CustomTactics[raidName] = nil;
+        TacticaDB.CustomTactics[raidName] = nil
     end
-    
-    -- Update in-memory data
-    if self.Data[raidName] then
-        if tacticName then
-            if self.Data[raidName][bossName] then
-                self.Data[raidName][bossName][tacticName] = nil;
-                
-                -- Clean up empty boss table
-                if next(self.Data[raidName][bossName]) == nil then
-                    self.Data[raidName][bossName] = nil;
-                end
-            end
-        else
-            self.Data[raidName][bossName] = nil;
-        end
-        
-        -- Clean up empty raid table
-        if next(self.Data[raidName] or {}) == nil then
-            self.Data[raidName] = nil;
-        end
-    end
-    
-    self:PrintMessage("Successfully removed "..
-        (tacticName and ("tactic '"..tacticName.."'") or "all tactics")..
-        " for "..bossName.." in "..raidName);
-    return true;
+
+    -- Update in-memory Data table
+    self:InitializeData() -- This will rebuild the combined data structure
+
+    return true
 end
 
 -- Post Frame Lock/Position Handling
