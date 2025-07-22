@@ -70,10 +70,10 @@ end
 local f = CreateFrame("Frame");
 f:RegisterEvent("ADDON_LOADED");
 f:RegisterEvent("PLAYER_LOGIN");
-f:SetScript("OnEvent", function(self, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == "Tactica" then
-        -- Initialize saved variables
-        TacticaDB = TacticaDB or {
+f:RegisterEvent("PLAYER_LOGOUT");
+local function InitializeSavedVariables()
+    if not TacticaDB then
+        TacticaDB = {
             version = Tactica.SavedVariablesVersion,
             CustomTactics = {},
             Settings = {
@@ -86,25 +86,53 @@ f:SetScript("OnEvent", function(self, event, arg1)
                     position = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = 0 }
                 }
             }
-        };
-        
-        -- Migration from old variables if needed
-        if Tactica_SavedVariables then
-            if Tactica_SavedVariables.CustomTactics then
-                TacticaDB.CustomTactics = Tactica_SavedVariables.CustomTactics
-            end
-            if Tactica_SavedVariables.Settings then
-                TacticaDB.Settings = Tactica_SavedVariables.Settings
-            end
-            Tactica_SavedVariables = nil
+        }
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Tactica:|r Created new saved variables database.");
+    else
+        TacticaDB.version = TacticaDB.version or Tactica.SavedVariablesVersion
+        TacticaDB.CustomTactics = TacticaDB.CustomTactics or {}
+        TacticaDB.Settings = TacticaDB.Settings or {
+            UseRaidWarning = true,
+            UseRaidChat = true,
+            UsePartyChat = false,
+            PopupScale = 1.0,
+            PostFrame = {
+                locked = false,
+                position = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = 0 }
+            }
+        }
+        TacticaDB.Settings.PostFrame = TacticaDB.Settings.PostFrame or {
+            locked = false,
+            position = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = 0 }
+        }
+    end
+    
+    if Tactica_SavedVariables then
+        if Tactica_SavedVariables.CustomTactics then
+            TacticaDB.CustomTactics = Tactica_SavedVariables.CustomTactics
         end
-        
-        DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r.");
+        if Tactica_SavedVariables.Settings then
+            TacticaDB.Settings = Tactica_SavedVariables.Settings
+        end
+        Tactica_SavedVariables = nil
+    end
+end
 
+f:SetScript("OnEvent", function()
+    if event == "ADDON_LOADED" and arg1 == "Tactica" then
+        InitializeSavedVariables()
+        DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r.");
     elseif event == "PLAYER_LOGIN" then
+        if not TacticaDB then
+            InitializeSavedVariables()
+        end
         Tactica:InitializeData();
         Tactica:CreateAddFrame();
         Tactica:CreatePostFrame();
+    elseif event == "PLAYER_LOGOUT" then
+        if TacticaDB then
+            Tactica:SavePostFramePosition()
+        end
     end
 end);
 
