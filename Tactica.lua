@@ -156,8 +156,11 @@ function Tactica:CommandHandler(msg)
     elseif command == "post" then
         self:ShowPostPopup();
     elseif command == "remove" then
-        table.remove(args, 1); -- Remove the "remove" command
-        self:RemoveTactic(unpack(args));
+        -- Combine remaining args into a single string and reprocess
+        table.remove(args, 1)
+        local removeArgs = table.concat(args, ",")
+        local newArgs = self:GetArgs(removeArgs)
+        self:RemoveTactic(unpack(newArgs));
     elseif command == "list" then
         self:ListAvailableTactics();
     else
@@ -208,35 +211,28 @@ function Tactica:FindTactic(raidName, bossName, tacticName)
     bossName = self:StandardizeName(bossName)
     tacticName = tacticName and self:StandardizeName(tacticName) or nil
     
-    -- First check custom tactics
-    if TacticaDB.CustomTactics[raidName] and 
-       TacticaDB.CustomTactics[raidName][bossName] then
-        if not tacticName or tacticName == "" then
-            -- Return the first tactic found if none specified
-            for _, text in pairs(TacticaDB.CustomTactics[raidName][bossName]) do
-                if text and text ~= "" then
-                    return text
-                end
-            end
-        else
-            -- Return specific tactic if found
-            if TacticaDB.CustomTactics[raidName][bossName][tacticName] then
-                return TacticaDB.CustomTactics[raidName][bossName][tacticName]
+    -- First check if specific tactic was requested
+    if tacticName and tacticName ~= "" then
+        -- Check both custom and default data regardless
+        local sources = {TacticaDB.CustomTactics, self.DefaultData}
+        for _, source in ipairs(sources) do
+            if source[raidName] and 
+               source[raidName][bossName] and
+               source[raidName][bossName][tacticName] then
+                return source[raidName][bossName][tacticName]
             end
         end
-    end
-    
-    -- If not found in custom data, check default data
-    if self.DefaultData[raidName] and self.DefaultData[raidName][bossName] then
-        if not tacticName or tacticName == "" then
-            -- Return the first tactic found if none specified
-            for _, text in pairs(self.DefaultData[raidName][bossName]) do
-                return text
-            end
-        else
-            -- Return specific tactic if found
-            if self.DefaultData[raidName][bossName][tacticName] then
-                return self.DefaultData[raidName][bossName][tacticName]
+    else
+        -- No specific tactic requested, return first available
+        -- Check custom first, then default
+        local sources = {TacticaDB.CustomTactics, self.DefaultData}
+        for _, source in ipairs(sources) do
+            if source[raidName] and source[raidName][bossName] then
+                for _, text in pairs(source[raidName][bossName]) do
+                    if text and text ~= "" then
+                        return text
+                    end
+                end
             end
         end
     end
@@ -279,8 +275,14 @@ function Tactica:RemoveTactic(raidName, bossName, tacticName)
     bossName = self:StandardizeName(bossName);
     tacticName = tacticName and self:StandardizeName(tacticName) or nil;
     
-    if not (TacticaDB.CustomTactics[raidName] and 
-            TacticaDB.CustomTactics[raidName][bossName]) then
+    -- Check if the raid exists in custom tactics
+    if not TacticaDB.CustomTactics[raidName] then
+        self:PrintError("No custom tactics found for "..raidName);
+        return false;
+    end
+    
+    -- Check if the boss exists
+    if not TacticaDB.CustomTactics[raidName][bossName] then
         self:PrintError("No custom tactics found for "..bossName.." in "..raidName);
         return false;
     end
@@ -291,12 +293,20 @@ function Tactica:RemoveTactic(raidName, bossName, tacticName)
             self:PrintError("Tactic '"..tacticName.."' not found for "..bossName);
             return false;
         end
+        
+        -- Actually remove the tactic
         TacticaDB.CustomTactics[raidName][bossName][tacticName] = nil;
+        
+        -- Clean up empty boss table if this was the last tactic
+        if next(TacticaDB.CustomTactics[raidName][bossName]) == nil then
+            TacticaDB.CustomTactics[raidName][bossName] = nil;
+        end
     else
+        -- Remove all tactics for this boss
         TacticaDB.CustomTactics[raidName][bossName] = nil;
     end
     
-    -- Clean up empty tables
+    -- Clean up empty raid table if this was the last boss
     if next(TacticaDB.CustomTactics[raidName] or {}) == nil then
         TacticaDB.CustomTactics[raidName] = nil;
     end
@@ -306,9 +316,19 @@ function Tactica:RemoveTactic(raidName, bossName, tacticName)
         if tacticName then
             if self.Data[raidName][bossName] then
                 self.Data[raidName][bossName][tacticName] = nil;
+                
+                -- Clean up empty boss table
+                if next(self.Data[raidName][bossName]) == nil then
+                    self.Data[raidName][bossName] = nil;
+                end
             end
         else
             self.Data[raidName][bossName] = nil;
+        end
+        
+        -- Clean up empty raid table
+        if next(self.Data[raidName] or {}) == nil then
+            self.Data[raidName] = nil;
         end
     end
     
@@ -348,7 +368,66 @@ end
 
 function Tactica:StandardizeName(name)
     if not name or name == "" then return "" end
-    return string.gsub(string.lower(name), "^%l", string.upper);
+    
+    -- Special case for "default" tactic
+    if string.lower(name) == "default" then
+        return "Default"
+    end
+    
+    -- Rest of the original function...
+    -- First check if it matches any aliases exactly (case insensitive)
+    local lowerName = string.lower(name)
+    for alias, properName in pairs(self.Aliases) do
+        if string.lower(alias) == lowerName then
+            return properName
+        end
+    end
+    
+    -- For custom data, use simple capitalization (first letter only)
+    if TacticaDB.CustomTactics then
+        -- Check raid names
+        for raidName in pairs(TacticaDB.CustomTactics) do
+            if string.lower(raidName) == lowerName then
+                return raidName
+            end
+            -- Check boss names
+            if TacticaDB.CustomTactics[raidName] then
+                for bossName in pairs(TacticaDB.CustomTactics[raidName]) do
+                    if string.lower(bossName) == lowerName then
+                        return bossName
+                    end
+                    -- Check tactic names
+                    if TacticaDB.CustomTactics[raidName][bossName] then
+                        for tacticName in pairs(TacticaDB.CustomTactics[raidName][bossName]) do
+                            if string.lower(tacticName) == lowerName then
+                                return tacticName
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- For default data, use proper capitalization from DefaultData
+    for raidName, bosses in pairs(self.DefaultData) do
+        if string.lower(raidName) == lowerName then
+            return raidName
+        end
+        for bossName in pairs(bosses) do
+            if string.lower(bossName) == lowerName then
+                return bossName
+            end
+            for tacticName in pairs(bosses[bossName]) do
+                if string.lower(tacticName) == lowerName then
+                    return tacticName
+                end
+            end
+        end
+    end
+    
+    -- Fallback: simple capitalization if not found anywhere
+    return string.gsub(string.lower(name), "^%l", string.upper)
 end
 
 function Tactica:GetArgs(str)
@@ -476,7 +555,7 @@ function Tactica:UpdateBossDropdown(raidName)
     -- Initialize boss dropdown
     UIDropDownMenu_Initialize(bossDropdown, function()
         for bossName in pairs(bosses) do
-            local bossName = bossName -- Local copy for closure
+            local bossName = bossName
             local info = {
                 text = bossName,
                 func = function()
@@ -541,7 +620,7 @@ function Tactica:CreateAddFrame()
             }
 
             for _, raidName in ipairs(raids) do
-                local raidName = raidName -- Local copy for closure
+                local raidName = raidName
                 local info = {
                     text = raidName,
                     func = function()
@@ -716,7 +795,7 @@ function Tactica:CreatePostFrame()
     f:RegisterForDrag("LeftButton")
     f.locked = false
     
-    -- Fix for Turtle WoW's Lua 5.0 - need to use frame reference directly
+ 
     f:SetScript("OnDragStart", function()
         if not f.locked then 
             f:StartMoving() 
@@ -884,7 +963,7 @@ function Tactica:UpdatePostBossDropdown(raidName)
     -- Initialize boss dropdown (copied from add frame with local variable fix)
     UIDropDownMenu_Initialize(bossDropdown, function()
         for bossName in pairs(bosses) do
-            local bossName = bossName -- Local copy for closure
+            local bossName = bossName
             local info = {
                 text = bossName,
                 func = function()
@@ -919,7 +998,7 @@ function Tactica:UpdatePostTacticDropdown(raidName, bossName)
         if self.DefaultData[raidName] and self.DefaultData[raidName][bossName] then
             for tacticName in pairs(self.DefaultData[raidName][bossName]) do
                 if tacticName ~= "Default" then
-                    local tacticName = tacticName -- Local copy for closure
+                    local tacticName = tacticName
                     local info = {
                         text = tacticName,
                         func = function()
@@ -936,7 +1015,7 @@ function Tactica:UpdatePostTacticDropdown(raidName, bossName)
            TacticaDB.CustomTactics[raidName][bossName] then
             for tacticName in pairs(TacticaDB.CustomTactics[raidName][bossName]) do
                 if tacticName ~= "Default" then
-                    local tacticName = tacticName -- Local copy for closure
+                    local tacticName = tacticName
                     local info = {
                         text = tacticName,
                         func = function()
