@@ -183,12 +183,6 @@ function Tactica:CommandHandler(msg)
         self:ShowAddPopup();
     elseif command == "post" then
         self:ShowPostPopup();
-    elseif command == "remove" then
-        -- Combine remaining args into a single string and reprocess
-        table.remove(args, 1)
-        local removeArgs = table.concat(args, ",")
-        local newArgs = self:GetArgs(removeArgs)
-        self:RemoveTactic(unpack(newArgs));
     elseif command == "list" then
         self:ListAvailableTactics();
     else
@@ -293,61 +287,6 @@ function Tactica:AddTactic(raidName, bossName, tacticName, tacticText)
     return true;
 end
 
-function Tactica:RemoveTactic(raidName, bossName, tacticName)
-    if not raidName or not bossName then
-        self:PrintError("Usage: /tt remove <Raid>,<Boss>,<Tactic>")
-        return false
-    end
-
-    raidName = self:StandardizeName(raidName)
-    bossName = self:StandardizeName(bossName)
-    tacticName = tacticName and self:StandardizeName(tacticName) or nil
-
-    -- Debug output
-    DEFAULT_CHAT_FRAME:AddMessage("|cff8888ffTactica Debug:|r Attempting to remove - Raid: "..tostring(raidName)..", Boss: "..tostring(bossName)..", Tactic: "..tostring(tacticName))
-
-    -- Verify the tactic exists in custom data
-    if not TacticaDB.CustomTactics[raidName] then
-        self:PrintError("No custom tactics exist for raid: "..raidName)
-        return false
-    end
-
-    if not TacticaDB.CustomTactics[raidName][bossName] then
-        self:PrintError("No custom tactics exist for boss: "..bossName.." in "..raidName)
-        return false
-    end
-
-    if tacticName and not TacticaDB.CustomTactics[raidName][bossName][tacticName] then
-        self:PrintError("No custom tactic named '"..tacticName.."' exists for "..bossName)
-        return false
-    end
-
-    -- Perform the removal
-    if tacticName then
-        -- Remove specific tactic
-        TacticaDB.CustomTactics[raidName][bossName][tacticName] = nil
-        self:PrintMessage("Removed custom tactic '"..tacticName.."' for "..bossName.." in "..raidName)
-    else
-        -- Remove all tactics for this boss
-        TacticaDB.CustomTactics[raidName][bossName] = nil
-        self:PrintMessage("Removed all custom tactics for "..bossName.." in "..raidName)
-    end
-
-    -- Clean up empty tables
-    if next(TacticaDB.CustomTactics[raidName][bossName] or {}) == nil then
-        TacticaDB.CustomTactics[raidName][bossName] = nil
-    end
-
-    if next(TacticaDB.CustomTactics[raidName] or {}) == nil then
-        TacticaDB.CustomTactics[raidName] = nil
-    end
-
-    -- Update in-memory Data table
-    self:InitializeData() -- This will rebuild the combined data structure
-
-    return true
-end
-
 -- Post Frame Lock/Position Handling
 function Tactica:SavePostFramePosition()
     if not self.postFrame then return end
@@ -384,7 +323,6 @@ function Tactica:StandardizeName(name)
         return "Default"
     end
     
-    -- Rest of the original function...
     -- First check if it matches any aliases exactly (case insensitive)
     local lowerName = string.lower(name)
     for alias, properName in pairs(self.Aliases) do
@@ -466,8 +404,6 @@ function Tactica:PrintHelp()
     self:PrintMessage("    - Opens a popup to add a custom tactic.");
     self:PrintMessage("  |cffffff00/tt post|r");
     self:PrintMessage("    - Opens a popup to select and post a tactic.");
-    self:PrintMessage("  |cffffff00/tt remove <Raid>,<Boss>,<Tactic>|r");
-    self:PrintMessage("    - Removes a tactic from memory.");
     self:PrintMessage("  |cffffff00/tt list|r");
     self:PrintMessage("    - Lists all available tactics.");
 end
