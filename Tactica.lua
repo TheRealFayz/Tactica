@@ -8,7 +8,8 @@ Tactica = {
     addFrame = nil,
     postFrame = nil,
     selectedRaid = nil,
-    selectedBoss = nil
+    selectedBoss = nil,
+    RecentlyPosted = {}
 };
 
 Tactica.Aliases = {
@@ -71,6 +72,7 @@ local f = CreateFrame("Frame");
 f:RegisterEvent("ADDON_LOADED");
 f:RegisterEvent("PLAYER_LOGIN");
 f:RegisterEvent("PLAYER_LOGOUT");
+f:RegisterEvent("PLAYER_TARGET_CHANGED");
 local function InitializeSavedVariables()
     if not TacticaDB then
         TacticaDB = {
@@ -133,6 +135,8 @@ f:SetScript("OnEvent", function()
         if TacticaDB then
             Tactica:SavePostFramePosition()
         end
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        Tactica:HandleTargetChange()
     end
 end);
 
@@ -141,6 +145,102 @@ SLASH_TACTICA1 = "/tactica";
 SLASH_TACTICA2 = "/tt";
 SlashCmdList["TACTICA"] = function(msg)
     Tactica:CommandHandler(msg);
+end
+
+function Tactica:HandleTargetChange()
+    -- Clear recently posted if player died (wipe detection)
+    if UnitIsDead("player") then
+        wipe(self.RecentlyPosted)
+        return
+    end
+    
+    -- Check all conditions for auto-posting
+    if not self:CanAutoPost() then
+        return
+    end
+    
+    local raidName, bossName = self:IsBossTarget()
+    if not raidName or not bossName then
+        return
+    end
+    
+    -- Check if we've already posted for this boss recently
+    local key = raidName..":"..bossName
+    if self.RecentlyPosted[key] then
+        return
+    end
+    
+    -- Mark as posted
+    self.RecentlyPosted[key] = true
+    
+    -- Set the selected raid and boss
+    self.selectedRaid = raidName
+    self.selectedBoss = bossName
+    
+    if not self.postFrame then
+        self:CreatePostFrame()
+    end
+    
+    -- Show the frame and force update both dropdowns
+    self.postFrame:Show()
+    UIDropDownMenu_SetText(raidName, TacticaPostRaidDropdown)
+    UIDropDownMenu_SetText(bossName, TacticaPostBossDropdown)
+    self:UpdatePostTacticDropdown(raidName, bossName)
+end
+
+function Tactica:IsBossTarget()
+    if not UnitExists("target") or UnitIsDead("target") or not UnitIsEnemy("player", "target") then
+        return nil, nil
+    end
+    
+    local targetName = UnitName("target")
+    if not targetName then return nil, nil end
+    
+    -- Check all raids and bosses
+    for raidName, bosses in pairs(self.Data) do
+        for bossName in pairs(bosses) do
+            if string.lower(bossName) == string.lower(targetName) then
+                return raidName, bossName
+            end
+        end
+    end
+    
+    return nil, nil
+end
+
+function Tactica:CanAutoPost()
+    -- Check basic conditions
+    if UnitIsDead("player") or UnitAffectingCombat("player") then
+        return false
+    end
+    
+    -- Check raid status
+    if not IsInRaid() then
+        return false
+    end
+    
+    -- Check raid leader/assist status (vanilla-compatible)
+    local isLeader, isAssist = false, false
+    
+    -- Get player name for comparison
+    local playerName = UnitName("player")
+    
+    -- Check raid status for all members
+    for i = 1, 40 do
+        local name, rank = GetRaidRosterInfo(i)
+        if name and name == playerName then
+            -- Rank 2 is leader, rank 1 is assist in vanilla
+            isLeader = (rank == 2)
+            isAssist = (rank == 1)
+            break
+        end
+    end
+    
+    if not (isLeader or isAssist) then
+        return false
+    end
+    
+    return true
 end
 
 function Tactica:InitializeData()
@@ -182,7 +282,7 @@ function Tactica:CommandHandler(msg)
     elseif command == "add" then
         self:ShowAddPopup();
     elseif command == "post" then
-        self:ShowPostPopup();
+        self:ShowPostPopup(true);
     elseif command == "list" then
         self:ListAvailableTactics();
     elseif command == "remove" then
@@ -1159,23 +1259,27 @@ function Tactica:UpdatePostTacticDropdown(raidName, bossName)
     end)
 end
 
-function Tactica:ShowPostPopup()
+function Tactica:ShowPostPopup(isManual)
     if not self.postFrame then
         self:CreatePostFrame()
     end
     
-    -- Reset selections but keep any previously selected raid/boss
-    UIDropDownMenu_SetText(Tactica.selectedRaid or "Select Raid", TacticaPostRaidDropdown)
-    UIDropDownMenu_SetText(Tactica.selectedBoss or "Select Boss", TacticaPostBossDropdown)
-    UIDropDownMenu_SetText("Select Tactic (opt.)", TacticaPostTacticDropdown)
-    
-    -- If we have a selected raid, update boss dropdown
-    if Tactica.selectedRaid then
-        self:UpdatePostBossDropdown(Tactica.selectedRaid)
-        
-        -- If we have a selected boss, update tactic dropdown
-        if Tactica.selectedBoss then
-            self:UpdatePostTacticDropdown(Tactica.selectedRaid, Tactica.selectedBoss)
+    if isManual then
+        -- For manual calls, reset selections
+        self.selectedRaid = nil
+        self.selectedBoss = nil
+        UIDropDownMenu_SetText("Select Raid", TacticaPostRaidDropdown)
+        UIDropDownMenu_SetText("Select Boss", TacticaPostBossDropdown)
+    else
+        -- For automatic calls, use the preselected values
+        if self.selectedRaid then
+            UIDropDownMenu_SetText(self.selectedRaid, TacticaPostRaidDropdown)
+            self:UpdatePostBossDropdown(self.selectedRaid)
+            
+            if self.selectedBoss then
+                UIDropDownMenu_SetText(self.selectedBoss, TacticaPostBossDropdown)
+                self:UpdatePostTacticDropdown(self.selectedRaid, self.selectedBoss)
+            end
         end
     end
     
