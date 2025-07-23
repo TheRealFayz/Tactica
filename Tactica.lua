@@ -185,6 +185,8 @@ function Tactica:CommandHandler(msg)
         self:ShowPostPopup();
     elseif command == "list" then
         self:ListAvailableTactics();
+    elseif command == "remove" then
+        self:ShowRemovePopup();
     else
         -- Handle direct commands like /tt mc,rag
         local raidNameRaw = table.remove(args, 1)
@@ -285,6 +287,43 @@ function Tactica:AddTactic(raidName, bossName, tacticName, tacticText)
     self.Data[raidName][bossName][tacticName] = tacticText;
     
     return true;
+end
+
+function Tactica:RemoveTactic(raidName, bossName, tacticName)
+    raidName = self:StandardizeName(raidName)
+    bossName = self:StandardizeName(bossName)
+    tacticName = self:StandardizeName(tacticName)
+    
+    if not (raidName and bossName and tacticName) then
+        self:PrintError("Invalid raid, boss, or tactic name")
+        return false
+    end
+    
+    if not (TacticaDB.CustomTactics[raidName] and 
+            TacticaDB.CustomTactics[raidName][bossName] and 
+            TacticaDB.CustomTactics[raidName][bossName][tacticName]) then
+        self:PrintError("Custom tactic not found")
+        return false
+    end
+    
+    -- Remove the tactic
+    TacticaDB.CustomTactics[raidName][bossName][tacticName] = nil
+    
+    -- Clean up empty tables
+    if next(TacticaDB.CustomTactics[raidName][bossName]) == nil then
+        TacticaDB.CustomTactics[raidName][bossName] = nil
+    end
+    
+    if next(TacticaDB.CustomTactics[raidName]) == nil then
+        TacticaDB.CustomTactics[raidName] = nil
+    end
+    
+    -- Update in-memory data
+    if self.Data[raidName] and self.Data[raidName][bossName] then
+        self.Data[raidName][bossName][tacticName] = nil
+    end
+    
+    return true
 end
 
 -- Post Frame Lock/Position Handling
@@ -406,6 +445,8 @@ function Tactica:PrintHelp()
     self:PrintMessage("    - Opens a popup to select and post a tactic.");
     self:PrintMessage("  |cffffff00/tt list|r");
     self:PrintMessage("    - Lists all available tactics.");
+    self:PrintMessage("  |cffffff00/tt remove|r");
+    self:PrintMessage("    - Opens a popup to remove a custom tactic.");
 end
 
 function Tactica:ListAvailableTactics()
@@ -880,6 +921,149 @@ function Tactica:CreatePostFrame()
     self.postFrame = f
 end
 
+function Tactica:CreateRemoveFrame()
+    if self.removeFrame then return end
+    
+    -- Main frame
+    local f = CreateFrame("Frame", "TacticaRemoveFrame", UIParent)
+    f:SetWidth(220)
+    f:SetHeight(165)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    f:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 32,
+        insets = { left = 11, right = 12, top = 12, bottom = 11 }
+    })
+    f:SetFrameStrata("DIALOG")
+    f:Hide()
+    
+    -- Title
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", f, "TOP", 0, -15)
+    title:SetText("Remove Custom Tactic")
+
+    -- Close button (X)
+    local closeButton = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    closeButton:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
+    closeButton:SetScript("OnClick", function() f:Hide() end)
+
+    -- RAID DROPDOWN
+    local raidLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    raidLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -40)
+    raidLabel:SetText("Raid:")
+
+    local raidDropdown = CreateFrame("Frame", "TacticaRemoveRaidDropdown", f, "UIDropDownMenuTemplate")
+    raidDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", 50, -36)
+    raidDropdown:SetWidth(150)
+
+    -- BOSS DROPDOWN
+    local bossLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    bossLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -70)
+    bossLabel:SetText("Boss:")
+
+    local bossDropdown = CreateFrame("Frame", "TacticaRemoveBossDropdown", f, "UIDropDownMenuTemplate")
+    bossDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", 50, -65)
+    bossDropdown:SetWidth(150)
+
+    -- TACTIC DROPDOWN
+    local tacticLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    tacticLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -100)
+    tacticLabel:SetText("Tactic:")
+
+    local tacticDropdown = CreateFrame("Frame", "TacticaRemoveTacticDropdown", f, "UIDropDownMenuTemplate")
+    tacticDropdown:SetPoint("TOPLEFT", f, "TOPLEFT", 50, -95)
+    tacticDropdown:SetWidth(250)
+
+    -- Initialize dropdowns
+    f:SetScript("OnShow", function()
+        -- Initialize raid dropdown with only raids that have custom tactics
+        UIDropDownMenu_Initialize(raidDropdown, function()
+            local hasCustomTactics = false
+            
+            for raidName, bosses in pairs(TacticaDB.CustomTactics or {}) do
+                if bosses and next(bosses) then
+                    hasCustomTactics = true
+                    local raidName = raidName
+                    local info = {
+                        text = raidName,
+                        func = function()
+                            Tactica.selectedRaid = raidName
+                            UIDropDownMenu_SetText(raidName, TacticaRemoveRaidDropdown)
+                            Tactica:UpdateRemoveBossDropdown(raidName)
+                        end
+                    }
+                    UIDropDownMenu_AddButton(info)
+                end
+            end
+            
+            if not hasCustomTactics then
+                local info = {
+                    text = "No custom tactics",
+                    func = function() end,
+                    disabled = true
+                }
+                UIDropDownMenu_AddButton(info)
+            end
+        end)
+        
+        -- Set initial raid text
+        if Tactica.selectedRaid and TacticaDB.CustomTactics[Tactica.selectedRaid] then
+            UIDropDownMenu_SetText(Tactica.selectedRaid, TacticaRemoveRaidDropdown)
+            Tactica:UpdateRemoveBossDropdown(Tactica.selectedRaid)
+        else
+            UIDropDownMenu_SetText("Select Raid", TacticaRemoveRaidDropdown)
+        end
+        
+        -- Set initial boss text
+        if Tactica.selectedBoss and Tactica.selectedRaid and 
+           TacticaDB.CustomTactics[Tactica.selectedRaid] and 
+           TacticaDB.CustomTactics[Tactica.selectedRaid][Tactica.selectedBoss] then
+            UIDropDownMenu_SetText(Tactica.selectedBoss, TacticaRemoveBossDropdown)
+            Tactica:UpdateRemoveTacticDropdown(Tactica.selectedRaid, Tactica.selectedBoss)
+        else
+            UIDropDownMenu_SetText("Select Boss", TacticaRemoveBossDropdown)
+        end
+        
+        -- Set initial tactic text
+        UIDropDownMenu_SetText("Select Tactic", TacticaRemoveTacticDropdown)
+    end)
+
+    -- Remove button
+    local removeButton = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    removeButton:SetWidth(100)
+    removeButton:SetHeight(25)
+    removeButton:SetPoint("BOTTOM", f, "BOTTOM", 0, 15)
+    removeButton:SetText("Remove")
+    removeButton:SetScript("OnClick", function()
+        local raid = Tactica.selectedRaid
+        local boss = Tactica.selectedBoss
+        local tactic = UIDropDownMenu_GetText(TacticaRemoveTacticDropdown)
+        
+        if not raid then
+            self:PrintError("Please select a raid")
+            return
+        end
+        
+        if not boss then
+            self:PrintError("Please select a boss")
+            return
+        end
+        
+        if tactic == "Select Tactic" then
+            self:PrintError("Please select a tactic to remove")
+            return
+        end
+        
+        if self:RemoveTactic(raid, boss, tactic) then
+            self:PrintMessage(string.format("Tactic '%s' for %s in %s removed successfully!", tactic, boss, raid))
+            f:Hide()
+        end
+    end)
+
+    self.removeFrame = f
+end
+
 function Tactica:UpdatePostBossDropdown(raidName)
     local bossDropdown = getglobal("TacticaPostBossDropdown")
     local tacticDropdown = getglobal("TacticaPostTacticDropdown")
@@ -996,6 +1180,91 @@ function Tactica:ShowPostPopup()
     end
     
     self.postFrame:Show()
+end
+
+-------------------------------------------------
+-- REMOVE TACTIC UI HELPER FUNCTIONS
+-------------------------------------------------
+
+function Tactica:UpdateRemoveBossDropdown(raidName)
+    local bossDropdown = getglobal("TacticaRemoveBossDropdown")
+    local tacticDropdown = getglobal("TacticaRemoveTacticDropdown")
+    
+    -- Reset selections
+    Tactica.selectedBoss = nil
+    UIDropDownMenu_SetText("Select Boss", TacticaRemoveBossDropdown)
+    UIDropDownMenu_SetText("Select Tactic", TacticaRemoveTacticDropdown)
+    
+    -- Get all bosses for this raid that have custom tactics
+    local bosses = {}
+    
+    if TacticaDB.CustomTactics[raidName] then
+        for bossName in pairs(TacticaDB.CustomTactics[raidName]) do
+            bosses[bossName] = true
+        end
+    end
+    
+    -- Initialize boss dropdown
+    UIDropDownMenu_Initialize(bossDropdown, function()
+        for bossName in pairs(bosses) do
+            local bossName = bossName
+            local info = {
+                text = bossName,
+                func = function()
+                    Tactica.selectedBoss = bossName
+                    UIDropDownMenu_SetText(bossName, TacticaRemoveBossDropdown)
+                    Tactica:UpdateRemoveTacticDropdown(raidName, bossName)
+                end
+            }
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+end
+
+function Tactica:UpdateRemoveTacticDropdown(raidName, bossName)
+    local tacticDropdown = getglobal("TacticaRemoveTacticDropdown")
+    
+    -- Reset selection
+    UIDropDownMenu_SetText("Select Tactic", TacticaRemoveTacticDropdown)
+    
+    -- Initialize tactic dropdown with custom tactics for this boss
+    UIDropDownMenu_Initialize(tacticDropdown, function()
+        if TacticaDB.CustomTactics[raidName] and TacticaDB.CustomTactics[raidName][bossName] then
+            for tacticName in pairs(TacticaDB.CustomTactics[raidName][bossName]) do
+                local tacticName = tacticName
+                local info = {
+                    text = tacticName,
+                    func = function()
+                        UIDropDownMenu_SetText(tacticName, TacticaRemoveTacticDropdown)
+                    end
+                }
+                UIDropDownMenu_AddButton(info)
+            end
+        end
+    end)
+end
+
+function Tactica:ShowRemovePopup()
+    if not self.removeFrame then
+        self:CreateRemoveFrame()
+    end
+    
+    -- Reset selections but keep any previously selected raid/boss
+    UIDropDownMenu_SetText(Tactica.selectedRaid or "Select Raid", TacticaRemoveRaidDropdown)
+    UIDropDownMenu_SetText(Tactica.selectedBoss or "Select Boss", TacticaRemoveBossDropdown)
+    UIDropDownMenu_SetText("Select Tactic", TacticaRemoveTacticDropdown)
+    
+    -- If we have a selected raid with custom tactics, update boss dropdown
+    if Tactica.selectedRaid and TacticaDB.CustomTactics[Tactica.selectedRaid] then
+        self:UpdateRemoveBossDropdown(Tactica.selectedRaid)
+        
+        -- If we have a selected boss with custom tactics, update tactic dropdown
+        if Tactica.selectedBoss and TacticaDB.CustomTactics[Tactica.selectedRaid][Tactica.selectedBoss] then
+            self:UpdateRemoveTacticDropdown(Tactica.selectedRaid, Tactica.selectedBoss)
+        end
+    end
+    
+    self.removeFrame:Show()
 end
 
 -------------------------------------------------
