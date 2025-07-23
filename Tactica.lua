@@ -219,7 +219,7 @@ function Tactica:CanAutoPost()
         return false
     end
     
-    -- Check raid leader/assist status (vanilla-compatible)
+    -- Check raid leader/assist status
     local isLeader, isAssist = false, false
     
     -- Get player name for comparison
@@ -265,7 +265,7 @@ function Tactica:InitializeData()
         for bossName, tactics in pairs(bosses) do
             self.Data[raidName][bossName] = self.Data[raidName][bossName] or {}
             for tacticName, text in pairs(tactics) do
-                if text and text ~= "" then  -- Only add if text exists
+                if text and text ~= "" then
                     self.Data[raidName][bossName][tacticName] = text
                 end
             end
@@ -909,10 +909,10 @@ function Tactica:CreatePostFrame()
 	lockButton:SetWidth(20)
 	lockButton:SetHeight(20)
 	lockButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -6)
-	lockButton:SetText(f.locked and "U" or "L")  -- Fixed: "U" for Unlocked, "L" for Locked
+	lockButton:SetText(f.locked and "U" or "L")
 	lockButton:SetScript("OnClick", function()
 		f.locked = not f.locked
-		lockButton:SetText(f.locked and "U" or "L")  -- Fixed
+		lockButton:SetText(f.locked and "U" or "L")
 		Tactica:SavePostFramePosition()
 	end)
 
@@ -945,7 +945,7 @@ function Tactica:CreatePostFrame()
 
     -- Initialize dropdowns
     f:SetScript("OnShow", function()
-        -- Initialize raid dropdown (copied exactly from add frame)
+        -- Initialize raid dropdown
         UIDropDownMenu_Initialize(raidDropdown, function()
             local raids = {
                 "Molten Core", "Blackwing Lair", "Zul'Gurub",
@@ -1011,7 +1011,7 @@ function Tactica:CreatePostFrame()
         end
         
         if tactic == "Select Tactic (opt.)" then
-            tactic = nil -- Use default tactic
+            tactic = nil
         end
         
         self:PostTactic(raid, boss, tactic)
@@ -1190,7 +1190,7 @@ function Tactica:UpdatePostBossDropdown(raidName)
         end
     end
     
-    -- Initialize boss dropdown (copied from add frame with local variable fix)
+    -- Initialize boss dropdown
     UIDropDownMenu_Initialize(bossDropdown, function()
         for bossName in pairs(bosses) do
             local bossName = bossName
