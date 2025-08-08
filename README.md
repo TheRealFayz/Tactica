@@ -23,13 +23,13 @@ Other commands are:
 -   If no tactic is selected, it will pick the latest added (else the default tactic)
 
 ### Remove custom raid tactics
-`/tt remove
+`/tt remove`
 -   Only custom tactics will be removable
 -   Dropdown populates based on saved custom tactics
 -   Can not remove default tactics
 
 ### List all available tactics
-`/tt list
+`/tt list`
 -   Lists default and custom tactics
 -   Will specify custom tactics under the respective raid/boss, with the chosen tactic name
 
