@@ -274,34 +274,46 @@ function Tactica:InitializeData()
 end
 
 function Tactica:CommandHandler(msg)
-    local args = self:GetArgs(msg);
-    local command = string.lower(args[1] or "");
+    local args = self:GetArgs(msg)
+    local command = string.lower(args[1] or "")
 
+    -- Always allow "help", "list", "add", and "remove"
     if command == "" or command == "help" then
-        self:PrintHelp();
-    elseif command == "add" then
-        self:ShowAddPopup();
-    elseif command == "post" then
-        self:ShowPostPopup(true);
+        self:PrintHelp()
     elseif command == "list" then
-        self:ListAvailableTactics();
+        self:ListAvailableTactics()
+    elseif command == "add" then
+        self:ShowAddPopup()
     elseif command == "remove" then
-        self:ShowRemovePopup();
+        self:ShowRemovePopup()
+    elseif command == "post" then
+        -- Block "/tt post" if not leader/assist
+        if not self:CanAutoPost() then
+            self:PrintError("You must be a raid leader or assist to post tactics.")
+            return
+        end
+        self:ShowPostPopup(true)
     else
-        -- Handle direct commands like /tt mc,rag
+        -- Handle direct commands like "/tt mc,rag"
+        -- Block if not leader/assist
+        if not self:CanAutoPost() then
+            self:PrintError("You must be a raid leader or assist to post tactics.")
+            return
+        end
+
         local raidNameRaw = table.remove(args, 1)
         local bossNameRaw = table.remove(args, 1)
         local tacticName = table.concat(args, ",")
         
         local raidName = self:ResolveAlias(raidNameRaw)
         local bossName = self:ResolveAlias(bossNameRaw)
-
+        
         if not (raidName and bossName) then
-            self:PrintError("Invalid format. Use /tt help");
-            return;
+            self:PrintError("Invalid format. Use /tt help")
+            return
         end
-
-        self:PostTactic(raidName, bossName, tacticName);
+        
+        self:PostTactic(raidName, bossName, tacticName)
     end
 end
 
