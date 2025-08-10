@@ -559,6 +559,8 @@ function Tactica:PrintHelp()
     self:PrintMessage("    - Lists all available tactics.");
     self:PrintMessage("  |cffffff00/tt remove|r");
     self:PrintMessage("    - Opens a popup to remove a custom tactic.");
+	self:PrintMessage("  |cffffff00/w Doite|r");
+    self:PrintMessage("    - Addon and tactics by Doite - msg if incorrect.");
 end
 
 function Tactica:ListAvailableTactics()
