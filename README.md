@@ -10,11 +10,13 @@ Other commands are:
 -   Select raid, boss and optionally tactic (else default if no custom has been added)
 -   Will automatically show when selecting a raid boss, out of combat
 -   You need to be raid leader or have assist (in a raid)
+<img width="275" height="207" alt="Tactica Post" src="https://github.com/user-attachments/assets/cb9b4a90-3a42-4176-bd50-ba6da3829371" />
 
 ### Add custom raid tactics
 `/tt add`
 -   Select raid, boss and choose a name for the tactic
 -   Press "enter" for line breaks that will divide the tactic into separate /raid messages in the tactic description box
+<img width="496" height="372" alt="Tactica Add" src="https://github.com/user-attachments/assets/383e90da-8d17-4957-8306-3c48e1798d18" />
 
 ### Manually post/announce raid tactics (for e.g. Macros)
 `/tt <Raid Name>,<Boss Name>,[Tactic Name(optional)]`
@@ -28,6 +30,7 @@ Other commands are:
 -   Only custom tactics will be removable
 -   Dropdown populates based on saved custom tactics
 -   Can not remove default tactics
+<img width="278" height="205" alt="Tactica Remove" src="https://github.com/user-attachments/assets/5354d688-7795-4377-8bb6-b97c69c0caab" />
 
 ### List all available tactics
 `/tt list`
