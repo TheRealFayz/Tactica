@@ -294,11 +294,6 @@ function Tactica:CommandHandler(msg)
     elseif command == "remove" then
         self:ShowRemovePopup()
     elseif command == "post" then
-        -- Block "/tt post" if not leader/assist
-        if not self:CanAutoPost() then
-            self:PrintError("You must be a raid leader or assist to post tactics.")
-            return
-        end
         self:ShowPostPopup(true)
     else
         -- Handle direct commands like "/tt mc,rag"
@@ -813,7 +808,7 @@ function Tactica:CreateAddFrame()
 
     scrollFrame:SetScrollChild(descEdit)
 
-   -- Buttons
+   -- Add Submit Button
     local cancel = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     cancel:SetWidth(100)
     cancel:SetHeight(25)
@@ -1010,34 +1005,39 @@ function Tactica:CreatePostFrame()
         Tactica:RestorePostFramePosition()
     end)
 
-    -- Submit button
+    -- Post button
     local submit = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     submit:SetWidth(100)
     submit:SetHeight(25)
     submit:SetPoint("BOTTOM", f, "BOTTOM", 0, 15)
     submit:SetText("Post")
     submit:SetScript("OnClick", function()
-        local raid = Tactica.selectedRaid
-        local boss = Tactica.selectedBoss
-        local tactic = UIDropDownMenu_GetText(TacticaPostTacticDropdown)
-        
-        if not raid then
-            self:PrintError("Please select a raid")
-            return
-        end
-        
-        if not boss then
-            self:PrintError("Please select a boss")
-            return
-        end
-        
-        if tactic == "Select Tactic (opt.)" then
-            tactic = nil
-        end
-        
-        self:PostTactic(raid, boss, tactic)
-        f:Hide()
-    end)
+		if not self:CanAutoPost() then
+			self:PrintError("You must be a raid leader or assist to post tactics.")
+			return
+		end
+		
+		local raid = Tactica.selectedRaid
+		local boss = Tactica.selectedBoss
+		local tactic = UIDropDownMenu_GetText(TacticaPostTacticDropdown)
+		
+		if not raid then
+			self:PrintError("Please select a raid")
+			return
+		end
+		
+		if not boss then
+			self:PrintError("Please select a boss")
+			return
+		end
+		
+		if tactic == "Select Tactic (opt.)" then
+			tactic = nil
+		end
+		
+		self:PostTactic(raid, boss, tactic)
+		f:Hide()
+	end)
 
     self.postFrame = f
 end
