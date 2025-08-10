@@ -1,14 +1,15 @@
 # Tactica
-Raid boss tactic announcer for Turtle Wow, which allows you to share strategies with fellow raiders. Includes over 85+ default raid tactics for all Turtle WoW raid content.
+Raid boss tactic announcer for Turtle Wow, which allows you to share strategies with fellow raiders. Includes over 85+ default raid tactics by Doite for all Turtle WoW raid content and allows for custom-added tactics as well.
 
 ## How to Use
-The addon will automatically show the post UI/frame when targeting a raid boss (move & lock/unlock available via "L"/"U" symbol to the top-right). It can be controlled more advanced through slash commands. The primary commands are `/tt` or `/tactica`, which will list available commands.
+The addon will automatically show the post UI/frame if you are the raid leader or have assist, when targeting a raid boss (move & lock/unlock available via "L"/"U" symbol to the top-right). It can be controlled more advanced through slash commands. The primary commands are `/tt` or `/tactica`, which will list available commands.
 Other commands are:
 
 ### Post/announce raid tactics
 `/tt post`
 -   Select raid, boss and optionally tactic (else default if no custom has been added)
 -   Will automatically show when selecting a raid boss, out of combat
+-   You need to be raid leader or have assist (in a raid)
 
 ### Add custom raid tactics
 `/tt add`
@@ -40,6 +41,9 @@ Other commands are:
 4.  Restart World of Warcraft completely.
 
 Alternatively just take add this link and add to the Turtle WoW launcher (addon tab -> Add new addon) or similarly with GithubAddonsManager: https://github.com/Player-Doite/tactica
+
+## Contact
+Addon, logic and default tactics all made by Doite. Contact me in-game, github via "Issues" or via TWoW discord if something is wrong.
 
 ## Special thanks to:
 [jrc13245](https://github.com/jrc13245/) - for initial inspiration
