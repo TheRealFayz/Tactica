@@ -1,5 +1,5 @@
 # Tactica
-Raid boss tactic announcer for Turtle Wow, allowing you to share strategies with fellow raiders. Includes over 85+ default raid tactics by Doite for all Turtle WoW raid content and provides a frame for custom-added tactics as well.
+Raid Boss Tactic Announcer for Turtle WoW — share strategies with your raid at the click of a button. Includes 85+ pre-written tactics by Doite covering all Turtle WoW raid content, plus the ability to add your own custom strategies.
 
 ## How to Use
 The addon will automatically show the post UI/frame if you are the raid leader or have assist, when targeting a raid boss (move & lock/unlock available via "L"/"U" symbol to the top-right). It can be controlled more advanced through slash commands. The primary commands are `/tt` or `/tactica`, which will list available commands.
