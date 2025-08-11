@@ -1,14 +1,17 @@
 # Tactica
-Raid Boss Tactic Announcer for Turtle WoW — share strategies with your raid at the click of a button. Includes 85+ pre-written tactics by Doite covering all Turtle WoW raid content, plus the ability to add your own custom strategies.
+## Announce raid-tactics & assign roles, synced!
+Raid Boss Tactic Announcer for Turtle WoW — share strategies with your raid at the click of a button. Includes 85+ pre-written tactics by Doite covering all Turtle WoW raid content, plus the ability to add your own custom strategies. Adds lightweight H/D/T role tags in the raid roster, officer-driven role sync, pfUI/SuperWoW awareness and sync, and a quick Post to Self/Raid option.
 
 ## How to Use
-The addon will automatically show the post UI/frame if you are the raid leader or have assist, when targeting a raid boss (move & lock/unlock available via "L"/"U" symbol to the top-right). It can be controlled more advanced through slash commands. The primary commands are `/tt` or `/tactica`, which will list available commands.
+1. **Posting**: When you (raid leader or assist) target a raid boss, the Post frame pops up (out of combat). Move/lock via the “L/U” icon. Use /tt or /tactica for full command help. Buttons: Post to Raid (raid leaders-only) and Post to Self (local preview to your chat).
+2. **Organizing**: Assign **H/D/T** roles from the raid roster; assignments sync to everyone running Tactica. Tank flags also bridge to pfUI when available (if both pfUI + SuperWoW are loaded, pfUI’s own “Toggle as Tank” is used).
 Other commands are:
 
 ### Post/announce raid tactics
 `/tt post`
 -   Select raid, boss and optionally tactic (else default if no custom has been added)
 -   Will automatically show when selecting a raid boss, out of combat
+-   Post to self (can always be done)
 -   You need to be raid leader or have assist (in a raid)
 <img width="275" height="207" alt="Tactica Post" src="https://github.com/user-attachments/assets/cb9b4a90-3a42-4176-bd50-ba6da3829371" />
 
@@ -37,6 +40,22 @@ Other commands are:
 -   Lists default and custom tactics
 -   Will specify custom tactics under the respective raid/boss, with the chosen tactic name
 
+## Roles: Assign & sync (H/D/T)
+- Right-click a name in the raid roster → Toggle as Healer / DPS / Tank (sync with pfUI+if SuperWoW is present).
+- Role tags (H/D/T) appear next to names and are exclusive (choosing one replaces the others).
+- Raid leader sync: raid leader/assist assignments broadcast to everyone running Tactica.
+
+### Role commands
+
+`/ttpush` or `/tactica pushroles`
+— (raid leaders) broadcast your current role list manually to the raid (should not be needed as there are several logics to do it automatically in place)
+`/ttclear` or `/tactica clearroles`
+— clear all roles (local; if raid leader, clears for everyone)
+
+### Debuf check-commands
+`/tactica_pfui` — show pfUI & SuperWoW detection status
+`/tactica_pfuitanks` — list pfUI tank flags or check one player by adding name after
+
 ## Installation
 1.  Navigate to your World of Warcraft installation folder.
 2.  Go into the `WoW` -> `Interface` -> `AddOns` directory.
@@ -51,3 +70,4 @@ Addon, logic and default tactics all made by Doite. Contact me in-game, github v
 ## Special thanks to:
 [jrc13245](https://github.com/jrc13245/) - for initial inspiration
 [i2ichardt](https://github.com/i2ichardt) - for code debugging
+[Shagu](https://github.com/shagu) - for coding tips
