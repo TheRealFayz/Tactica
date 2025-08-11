@@ -1,8 +1,9 @@
 ## Interface: 11200
 ## Title: Tactica
-## Version: 1.4
-## Notes: Raid Boss Tactics Announcer [/tt]
+## Version: 1.5
+## Notes: Announce tactics & assign roles, synced!
 ## Author: Doite
 ## SavedVariables: TacticaDB
 
 Tactica.lua
+TacticaRaidRoles.lua

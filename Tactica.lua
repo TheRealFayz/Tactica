@@ -85,6 +85,7 @@ local function InitializeSavedVariables()
         TacticaDB = {
             version = Tactica.SavedVariablesVersion,
             CustomTactics = {},
+            Healers = {}, -- NEW: role flags for raid members
             Settings = {
                 UseRaidWarning = true,
                 UseRaidChat = true,
@@ -100,6 +101,7 @@ local function InitializeSavedVariables()
     else
         TacticaDB.version = TacticaDB.version or Tactica.SavedVariablesVersion
         TacticaDB.CustomTactics = TacticaDB.CustomTactics or {}
+        TacticaDB.Healers = TacticaDB.Healers or {} -- NEW: ensure table exists on old DBs
         TacticaDB.Settings = TacticaDB.Settings or {
             UseRaidWarning = true,
             UseRaidChat = true,
@@ -115,7 +117,8 @@ local function InitializeSavedVariables()
             position = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = 0 }
         }
     end
-    
+
+    -- Legacy migration block (kept as-is)
     if Tactica_SavedVariables then
         if Tactica_SavedVariables.CustomTactics then
             TacticaDB.CustomTactics = Tactica_SavedVariables.CustomTactics
@@ -295,7 +298,19 @@ function Tactica:CommandHandler(msg)
         self:ShowRemovePopup()
     elseif command == "post" then
         self:ShowPostPopup(true)
-    else
+    elseif command == "pushroles" then
+        if TacticaRaidRoles_PushRoles then
+            TacticaRaidRoles_PushRoles(false)
+        else
+            self:PrintError("Raid roles module not loaded.")
+        end
+    elseif command == "clearroles" then
+        if TacticaRaidRoles_ClearAllRoles then
+            TacticaRaidRoles_ClearAllRoles(false)
+        else
+            self:PrintError("Raid roles module not loaded.")
+        end
+	else
         -- Handle direct commands like "/tt mc,rag"
         -- Block if not leader/assist
         if not self:CanAutoPost() then
@@ -339,6 +354,19 @@ function Tactica:PostTactic(raidName, bossName, tacticName)
         end
     else
         self:PrintError("Tactic not found. Use /tt list to see available tactics.");
+    end
+end
+
+function Tactica:PostTacticToSelf(raidName, bossName, tacticName)
+    local tacticText = self:FindTactic(raidName, bossName, tacticName)
+    if tacticText then
+        local f = DEFAULT_CHAT_FRAME or ChatFrame1
+        f:AddMessage("|cff33ff99Tactica (Self):|r --- " .. string.upper(bossName or "DEFAULT") .. " STRATEGY ---")
+        for line in string.gmatch(tacticText, "([^\n]+)") do
+            f:AddMessage(line)
+        end
+    else
+        self:PrintError("Tactic not found. Use /tt list to see available tactics.")
     end
 end
 
@@ -561,6 +589,10 @@ function Tactica:PrintHelp()
     self:PrintMessage("    - Lists all available tactics.");
     self:PrintMessage("  |cffffff00/tt remove|r");
     self:PrintMessage("    - Opens a popup to remove a custom tactic.");
+	self:PrintMessage("  |cffffff00/ttpush|r or |cffffff00/tt pushroles|r");
+    self:PrintMessage("    - Raid leaders only: push all role assignments (H/D/T) to the raid manually.");
+	self:PrintMessage("  |cffffff00/ttclear|r or |cffffff00/tt clearroles|r");
+	self:PrintMessage("    - Clear all role tags locally (Raid leaders: clears for the whole raid).");
 	self:PrintMessage("  |cffffff00/w Doite|r");
     self:PrintMessage("    - Addon and tactics by Doite - msg if incorrect.");
 end
@@ -898,7 +930,6 @@ function Tactica:CreatePostFrame()
     f:RegisterForDrag("LeftButton")
     f.locked = false
     
- 
     f:SetScript("OnDragStart", function()
         if not f.locked then 
             f:StartMoving() 
@@ -922,15 +953,15 @@ function Tactica:CreatePostFrame()
 
     -- Lock button
     local lockButton = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-	lockButton:SetWidth(20)
-	lockButton:SetHeight(20)
-	lockButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -6)
-	lockButton:SetText(f.locked and "U" or "L")
-	lockButton:SetScript("OnClick", function()
-		f.locked = not f.locked
-		lockButton:SetText(f.locked and "U" or "L")
-		Tactica:SavePostFramePosition()
-	end)
+    lockButton:SetWidth(20)
+    lockButton:SetHeight(20)
+    lockButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -6)
+    lockButton:SetText(f.locked and "U" or "L")
+    lockButton:SetScript("OnClick", function()
+        f.locked = not f.locked
+        lockButton:SetText(f.locked and "U" or "L")
+        Tactica:SavePostFramePosition()
+    end)
 
     -- RAID DROPDOWN
     local raidLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -969,75 +1000,88 @@ function Tactica:CreatePostFrame()
                 "Onyxia's Lair", "Emerald Sanctum", "Naxxramas",
                 "Lower Karazhan Halls", "Upper Karazhan Halls", "World Bosses"
             }
-
             for _, raidName in ipairs(raids) do
-                local raidName = raidName
+                local r = raidName
                 local info = {
-                    text = raidName,
+                    text = r,
                     func = function()
-                        Tactica.selectedRaid = raidName
-                        UIDropDownMenu_SetText(raidName, TacticaPostRaidDropdown)
-                        Tactica:UpdatePostBossDropdown(raidName)
+                        Tactica.selectedRaid = r
+                        UIDropDownMenu_SetText(r, TacticaPostRaidDropdown)
+                        Tactica:UpdatePostBossDropdown(r)
                     end
                 }
                 UIDropDownMenu_AddButton(info)
             end
         end)
         
-        -- Set initial raid text
-        if Tactica.selectedRaid then
-            UIDropDownMenu_SetText(Tactica.selectedRaid, TacticaPostRaidDropdown)
-        else
-            UIDropDownMenu_SetText("Select Raid", TacticaPostRaidDropdown)
-        end
-        
-        -- Set initial boss text
-        if Tactica.selectedBoss then
-            UIDropDownMenu_SetText(Tactica.selectedBoss, TacticaPostBossDropdown)
-        else
-            UIDropDownMenu_SetText("Select Boss", TacticaPostBossDropdown)
-        end
-        
-        -- Set initial tactic text
+        -- Set initial texts
+        UIDropDownMenu_SetText(Tactica.selectedRaid or "Select Raid", TacticaPostRaidDropdown)
+        UIDropDownMenu_SetText(Tactica.selectedBoss or "Select Boss", TacticaPostBossDropdown)
         UIDropDownMenu_SetText("Select Tactic (opt.)", TacticaPostTacticDropdown)
-        
+
         -- Restore position
         Tactica:RestorePostFramePosition()
     end)
 
-    -- Post button
+    -- Post to Raid (bottom-right, leader/assist only)
     local submit = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     submit:SetWidth(100)
     submit:SetHeight(25)
-    submit:SetPoint("BOTTOM", f, "BOTTOM", 0, 15)
-    submit:SetText("Post")
+    submit:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 15)
+    submit:SetText("Post to Raid")
     submit:SetScript("OnClick", function()
-		if not self:CanAutoPost() then
-			self:PrintError("You must be a raid leader or assist to post tactics.")
-			return
-		end
-		
-		local raid = Tactica.selectedRaid
-		local boss = Tactica.selectedBoss
-		local tactic = UIDropDownMenu_GetText(TacticaPostTacticDropdown)
-		
-		if not raid then
-			self:PrintError("Please select a raid")
-			return
-		end
-		
-		if not boss then
-			self:PrintError("Please select a boss")
-			return
-		end
-		
-		if tactic == "Select Tactic (opt.)" then
-			tactic = nil
-		end
-		
-		self:PostTactic(raid, boss, tactic)
-		f:Hide()
-	end)
+        if not self:CanAutoPost() then
+            self:PrintError("You must be a raid leader or assist to post tactics.")
+            return
+        end
+        local raid = Tactica.selectedRaid
+        local boss = Tactica.selectedBoss
+        local tactic = UIDropDownMenu_GetText(TacticaPostTacticDropdown)
+        if not raid then self:PrintError("Please select a raid"); return end
+        if not boss then self:PrintError("Please select a boss"); return end
+        if tactic == "Select Tactic (opt.)" then tactic = nil end
+        self:PostTactic(raid, boss, tactic)
+        f:Hide()
+    end)
+
+    -- Post to Self (bottom-left, green, no leader requirement)
+    local selfBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    selfBtn:SetWidth(100)
+    selfBtn:SetHeight(25)
+    selfBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 15)
+    selfBtn:SetText("Post to Self")
+	
+    -- Vanilla green styling
+	local fs = selfBtn:GetFontString()
+	if fs and fs.SetTextColor then
+	  fs:SetTextColor(0.2, 1.0, 0.2) -- green text
+	end
+
+	selfBtn:SetNormalTexture("Interface\\Buttons\\UI-Panel-Button-Up")
+	local nt = selfBtn:GetNormalTexture()
+	if nt then nt:SetVertexColor(0.2, 0.8, 0.2) end
+
+	selfBtn:SetPushedTexture("Interface\\Buttons\\UI-Panel-Button-Down")
+	local pt = selfBtn:GetPushedTexture()
+	if pt then pt:SetVertexColor(0.2, 0.8, 0.2) end
+
+	selfBtn:SetHighlightTexture("Interface\\Buttons\\UI-Panel-Button-Highlight")
+	local ht = selfBtn:GetHighlightTexture()
+	if ht then
+	  ht:SetBlendMode("ADD")
+	  ht:SetVertexColor(0.2, 1.0, 0.2)
+	end
+
+    selfBtn:SetScript("OnClick", function()
+        local raid = Tactica.selectedRaid
+        local boss = Tactica.selectedBoss
+        local tactic = UIDropDownMenu_GetText(TacticaPostTacticDropdown)
+        if not raid then self:PrintError("Please select a raid"); return end
+        if not boss then self:PrintError("Please select a boss"); return end
+        if tactic == "Select Tactic (opt.)" then tactic = nil end
+        self:PostTacticToSelf(raid, boss, tactic)
+        f:Hide()
+    end)
 
     self.postFrame = f
 end
