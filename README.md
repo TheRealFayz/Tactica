@@ -7,13 +7,18 @@ Raid Boss Tactic Announcer for Turtle WoW — share strategies with your raid at
 2. **Organizing**: Assign **H/D/T** roles from the raid roster; assignments sync to everyone running Tactica. Tank flags also bridge to pfUI when available (if both pfUI + SuperWoW are loaded, pfUI’s own “Toggle as Tank” is used).
 Other commands are:
 
-### Post/announce raid tactics
+### Manually post raid tactics (to Self or Raid)
 `/tt post`
 -   Select raid, boss and optionally tactic (else default if no custom has been added)
--   Will automatically show when selecting a raid boss, out of combat
--   Post to self (can always be done)
--   You need to be raid leader or have assist (in a raid)
-<img width="275" height="207" alt="Tactica Post" src="https://github.com/user-attachments/assets/cb9b4a90-3a42-4176-bd50-ba6da3829371" />
+-   "Post to self" can always be done
+-   "Post to Raid" requires to be raid leader or raid assist
+<img width="274" height="227" alt="Tactica - Post" src="https://github.com/user-attachments/assets/e039a6d1-9194-4bfb-93dd-564700035daf" />
+
+### Toggle "autopost" - showing the post frame automatically targeting a boss
+`/tt auto`
+- Will automatically show when targeting a raid boss, out of combat
+- Can be toggled on the "post frame" via checkmark
+- Will only show if you are raid leader or raid assist
 
 ### Add custom raid tactics
 `/tt add`
