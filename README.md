@@ -1,6 +1,6 @@
 # Tactica
 ## Announce raid-tactics & assign roles, synced!
-Raid Boss Tactic Announcer for Turtle WoW — share strategies with your raid at the click of a button. Includes 85+ pre-written tactics by Doite covering all Turtle WoW raid content, plus the ability to add your own custom strategies. Adds lightweight H/D/T role tags in the raid roster, officer-driven role sync, pfUI/SuperWoW awareness and sync, and a quick Post to Self/Raid option.
+Raid Boss Tactic Announcer for Turtle WoW — share strategies with your raid at the click of a button. Includes ~90 pre-written tactics by Doite covering all Turtle WoW raid content, plus the ability to add your own custom strategies. Adds lightweight H/D/T role tags in the raid roster, officer-driven role sync, pfUI/SuperWoW awareness and sync, and a quick Post to Self/Raid option.
 
 ## How to Use
 1. **Posting**: When you (raid leader or assist) target a raid boss, the Post frame pops up (out of combat). Move/lock via the “L/U” icon. Use /tt or /tactica for full command help. Buttons: Post to Raid (raid leaders-only) and Post to Self (local preview to your chat).
