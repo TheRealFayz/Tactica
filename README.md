@@ -26,7 +26,7 @@ Other commands are:
 -   Press "enter" for line breaks that will divide the tactic into separate /raid messages in the tactic description box
 <img width="496" height="372" alt="Tactica Add" src="https://github.com/user-attachments/assets/383e90da-8d17-4957-8306-3c48e1798d18" />
 
-### Manually post/announce raid tactics (for e.g. Macros)
+### Manually post/announce raid tactics via chat string (for e.g. Macros)
 `/tt <Raid Name>,<Boss Name>,[Tactic Name(optional)]`
 -   Separated by a comma
 -   The command is not case- or space-sensitive
