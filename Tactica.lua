@@ -784,7 +784,6 @@ function Tactica:CreateAddFrame()
                 "Onyxia's Lair", "Emerald Sanctum", "Naxxramas",
                 "Lower Karazhan Halls", "Upper Karazhan Halls", "World Bosses"
             }
-
             for _, raidName in ipairs(raids) do
                 local raidName = raidName
                 local info = {
@@ -947,7 +946,7 @@ function Tactica:CreatePostFrame()
     -- Main frame
     local f = CreateFrame("Frame", "TacticaPostFrame", UIParent)
     f:SetWidth(220)
-    f:SetHeight(165)
+    f:SetHeight(185)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -1049,7 +1048,13 @@ function Tactica:CreatePostFrame()
         UIDropDownMenu_SetText(Tactica.selectedRaid or "Select Raid", TacticaPostRaidDropdown)
         UIDropDownMenu_SetText(Tactica.selectedBoss or "Select Boss", TacticaPostBossDropdown)
         UIDropDownMenu_SetText("Select Tactic (opt.)", TacticaPostTacticDropdown)
-
+		
+		if TacticaAutoPostCheckbox then
+			TacticaAutoPostCheckbox:SetChecked(
+				not (TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == false)
+			)
+		end
+		
         -- Restore position
         Tactica:RestorePostFramePosition()
     end)
@@ -1112,6 +1117,30 @@ function Tactica:CreatePostFrame()
         if tactic == "Select Tactic (opt.)" then tactic = nil end
         self:PostTacticToSelf(raid, boss, tactic)
         f:Hide()
+    end)
+	  
+	  -- Auto-open on boss (checkbox)
+    local autoCB = CreateFrame("CheckButton", "TacticaAutoPostCheckbox", f, "UICheckButtonTemplate")
+    autoCB:SetWidth(24); autoCB:SetHeight(24)
+    autoCB:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 40)
+
+    local label = getglobal("TacticaAutoPostCheckboxText")
+    if label then
+        label:SetText("Auto-open on boss")
+    end
+
+    autoCB:SetChecked(not (TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == false))
+
+    autoCB:SetScript("OnClick", function()
+        local on = autoCB:GetChecked() and true or false
+        if not TacticaDB or not TacticaDB.Settings then return end
+        TacticaDB.Settings.AutoPostOnBoss = on
+        if on then
+            Tactica.AutoPostHintShown = false
+            Tactica:PrintMessage("Auto-popup is |cff00ff00ON|r. It will open on boss targets.")
+        else
+            Tactica:PrintMessage("Auto-popup is |cffff5555OFF|r. Use '/tt post' or '/tt autopost' to enable.")
+        end
     end)
 
     self.postFrame = f
