@@ -1,6 +1,6 @@
 ## Interface: 11200
 ## Title: Tactica
-## Version: 1.6
+## Version: 1.7
 ## Notes: Announce raid-tactics & assign roles, synced!
 ## Author: Doite
 ## SavedVariables: TacticaDB

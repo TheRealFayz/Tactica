@@ -9,6 +9,7 @@ Tactica = {
     postFrame = nil,
     selectedRaid = nil,
     selectedBoss = nil,
+	AutoPostHintShown = false,
     RecentlyPosted = {}
 };
 
@@ -91,6 +92,7 @@ local function InitializeSavedVariables()
                 UseRaidChat = true,
                 UsePartyChat = false,
                 PopupScale = 1.0,
+				AutoPostOnBoss = true,
                 PostFrame = {
                     locked = false,
                     position = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = 0 }
@@ -120,14 +122,19 @@ local function InitializeSavedVariables()
 
     -- Legacy migration block (kept as-is)
     if Tactica_SavedVariables then
-        if Tactica_SavedVariables.CustomTactics then
-            TacticaDB.CustomTactics = Tactica_SavedVariables.CustomTactics
-        end
-        if Tactica_SavedVariables.Settings then
-            TacticaDB.Settings = Tactica_SavedVariables.Settings
-        end
-        Tactica_SavedVariables = nil
-    end
+		if Tactica_SavedVariables.CustomTactics then
+			TacticaDB.CustomTactics = Tactica_SavedVariables.CustomTactics
+		end
+		if Tactica_SavedVariables.Settings then
+			TacticaDB.Settings = Tactica_SavedVariables.Settings
+		end
+		Tactica_SavedVariables = nil
+	end
+
+	-- Ensure default exists for everyone (legacy or fresh)
+	if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == nil then
+		TacticaDB.Settings.AutoPostOnBoss = true
+	end
 end
 
 f:SetScript("OnEvent", function()
@@ -174,6 +181,15 @@ function Tactica:HandleTargetChange()
         return
     end
     
+	    -- Respect user setting to disable auto-popup, but show a one-time hint
+    if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == false then
+        if not Tactica.AutoPostHintShown then
+            Tactica.AutoPostHintShown = true
+            self:PrintMessage("Auto-popup is off — use '/tt post' or '/tt autopost' to enable it again.")
+        end
+        return
+    end
+
     -- Check if we've already posted for this boss recently
     local key = raidName..":"..bossName
     if self.RecentlyPosted[key] then
@@ -290,29 +306,46 @@ function Tactica:CommandHandler(msg)
     -- Always allow "help", "list", "add", and "remove"
     if command == "" or command == "help" then
         self:PrintHelp()
+
     elseif command == "list" then
         self:ListAvailableTactics()
+
     elseif command == "add" then
         self:ShowAddPopup()
+
     elseif command == "remove" then
         self:ShowRemovePopup()
+
     elseif command == "post" then
+        -- open the post UI
         self:ShowPostPopup(true)
+
+    elseif command == "autopost" then
+		-- toggle only
+		TacticaDB.Settings.AutoPostOnBoss = not TacticaDB.Settings.AutoPostOnBoss
+		if TacticaDB.Settings.AutoPostOnBoss then
+			Tactica.AutoPostHintShown = false
+			self:PrintMessage("Auto-popup is |cff00ff00ON|r. It will open on boss targets.")
+		else
+			self:PrintMessage("Auto-popup is |cffff5555OFF|r. Use '/tt post' or '/tt autopost' to enable.")
+		end
+
     elseif command == "pushroles" then
         if TacticaRaidRoles_PushRoles then
             TacticaRaidRoles_PushRoles(false)
         else
             self:PrintError("Raid roles module not loaded.")
         end
+
     elseif command == "clearroles" then
         if TacticaRaidRoles_ClearAllRoles then
             TacticaRaidRoles_ClearAllRoles(false)
         else
             self:PrintError("Raid roles module not loaded.")
         end
-	else
+
+    else
         -- Handle direct commands like "/tt mc,rag"
-        -- Block if not leader/assist
         if not self:CanAutoPost() then
             self:PrintError("You must be a raid leader or assist to post tactics.")
             return
@@ -321,15 +354,15 @@ function Tactica:CommandHandler(msg)
         local raidNameRaw = table.remove(args, 1)
         local bossNameRaw = table.remove(args, 1)
         local tacticName = table.concat(args, ",")
-        
+
         local raidName = self:ResolveAlias(raidNameRaw)
         local bossName = self:ResolveAlias(bossNameRaw)
-        
+
         if not (raidName and bossName) then
             self:PrintError("Invalid format. Use /tt help")
             return
         end
-        
+
         self:PostTactic(raidName, bossName, tacticName)
     end
 end
@@ -585,6 +618,8 @@ function Tactica:PrintHelp()
     self:PrintMessage("    - Lists all available tactics.");
     self:PrintMessage("  |cffffff00/tt remove|r");
     self:PrintMessage("    - Opens a popup to remove a custom tactic.");
+	self:PrintMessage("  |cffffff00/tt autopost|r");
+    self:PrintMessage("    - Toggle the auto-popup when targeting a boss.");
 	self:PrintMessage("  |cffffff00/ttpush|r or |cffffff00/tt pushroles|r");
     self:PrintMessage("    - Raid leaders only: push all role assignments (H/D/T) to the raid manually.");
 	self:PrintMessage("  |cffffff00/ttclear|r or |cffffff00/tt clearroles|r");
