@@ -44,6 +44,7 @@ Other commands are:
 - Right-click a name in the raid roster → Toggle as Healer / DPS / Tank (sync with pfUI+if SuperWoW is present).
 - Role tags (H/D/T) appear next to names and are exclusive (choosing one replaces the others).
 - Raid leader sync: raid leader/assist assignments broadcast to everyone running Tactica.
+<img width="492" height="327" alt="Tactica - Roster" src="https://github.com/user-attachments/assets/991708d0-b30d-402f-9eff-57cb767b9859" />
 
 ### Role commands
 
