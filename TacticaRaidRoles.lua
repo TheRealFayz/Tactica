@@ -584,9 +584,6 @@ local function MaybeBroadcastFullList()
   if lastFullBroadcast ~= 0 and now - lastFullBroadcast < 2 then return end
   local count = Broadcast_FullList()
   lastFullBroadcast = now
-  if (DEFAULT_CHAT_FRAME or ChatFrame1) and count and count > 0 then
-    (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage(string.format("|cff33ff99Tactica:|r Pushed %d role assignment(s) to raid.", count))
-  end
 end
 
 -- small delay helper
