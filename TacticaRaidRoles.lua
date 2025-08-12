@@ -241,7 +241,7 @@ local function IsLeaderOrAssistByName(name)
 end
 
 local function IsSelfLeaderOrAssist()
-  if not UnitInRaid or not UnitInRaid("player") then return false end
+  if not UnitInRaid("player") then return false end
   local me = UnitName and UnitName("player") or nil
   return IsLeaderOrAssistByName(me)
 end
@@ -268,26 +268,26 @@ end
 
 local function Broadcast_Set(name, role)
   if not name or name == "" or not role or role == "" then return end
-  if not UnitInRaid or not UnitInRaid("player") then return end
+  if not UnitInRaid("player") then return end
   if not IsSelfLeaderOrAssist() then return end
   SendAddonMessage(ADDON_PREFIX, "S:" .. role .. ":" .. name, "RAID")
 end
 
 local function Broadcast_Clear(name)
   if not name or name == "" then return end
-  if not UnitInRaid or not UnitInRaid("player") then return end
+  if not UnitInRaid("player") then return end
   if not IsSelfLeaderOrAssist() then return end
   SendAddonMessage(ADDON_PREFIX, "C::" .. name, "RAID")
 end
 
 local function Broadcast_ClearAll()
-  if not UnitInRaid or not UnitInRaid("player") then return end
+  if not UnitInRaid("player") then return end
   if not IsSelfLeaderOrAssist() then return end
   SendAddonMessage(ADDON_PREFIX, "X::CLEARALL", "RAID")
 end
 
 local function Broadcast_FullList()
-  if not UnitInRaid or not UnitInRaid("player") then return 0 end
+  if not UnitInRaid("player") then return 0 end
   if not IsSelfLeaderOrAssist() then return 0 end
   local count = 0
   for name, v in pairs(TacticaDB.Healers) do if v then SendAddonMessage(ADDON_PREFIX, "S:H:"..name, "RAID"); count = count + 1 end end
@@ -297,7 +297,7 @@ local function Broadcast_FullList()
 end
 
 local function SendHelloRequest()
-  if not UnitInRaid or not UnitInRaid("player") then return end
+  if not UnitInRaid("player") then return end
   SendAddonMessage(ADDON_PREFIX, "Q::HELLO", "RAID")
 end
 
@@ -388,7 +388,7 @@ local hookInstalled = false
 local function HandleMenuClick()
   if not this or not this.value then return end
   EnsureDB()
-  if not UnitInRaid or not UnitInRaid("player") then return end
+  if not UnitInRaid("player") then return end
 
   local dropdownFrame = getglobal(UIDROPDOWNMENU_INIT_MENU or "")
   if not dropdownFrame then return end
@@ -604,7 +604,7 @@ end
 ------------------------------------------------------------
 function TacticaRaidRoles_PushRoles(silent)
   EnsureDB()
-  if not UnitInRaid or not UnitInRaid("player") then
+  if not UnitInRaid("player") then
     if not silent and (DEFAULT_CHAT_FRAME or ChatFrame1) then (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage("|cff33ff99Tactica:|r You must be in a raid to push roles.") end
     return
   end
@@ -675,7 +675,7 @@ f:SetScript("OnEvent", function()
   end
 
   if event == "RAID_ROSTER_UPDATE" then
-    local inRaid = UnitInRaid and UnitInRaid("player")
+    local inRaid = UnitInRaid("player")
     if inRaid and not selfWasInRaid then
       justJoinedAt = GetTime and GetTime() or 0
       RunLater(0.5, function() SendHelloRequest() end)
@@ -695,7 +695,7 @@ f:SetScript("OnEvent", function()
 
   elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_LOGIN" or event == "VARIABLES_LOADED" then
     AddMenuAndHooks()
-    selfWasInRaid = UnitInRaid and UnitInRaid("player") and true or false
+    selfWasInRaid = UnitInRaid("player") and true or false
     if selfWasInRaid then RunLater(0.8, function() SendHelloRequest() end) end
     local sig2 = BuildRosterSignature()
     if sig2 ~= "" then lastRosterSig = sig2 end

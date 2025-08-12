@@ -225,7 +225,7 @@ function Tactica:CanAutoPost()
     end
     
     -- Check raid status
-    if not IsInRaid() then
+    if not UnitInRaid("player") then
         return false
     end
     
@@ -342,13 +342,9 @@ function Tactica:PostTactic(raidName, bossName, tacticName)
             SendChatMessage("--- "..string.upper(bossName or "DEFAULT").." STRATEGY (read chat) ---", "RAID_WARNING");
         end
         
-        local chatType = "RAID";
-        if not IsInRaid() then
-            chatType = IsInGroup() and "PARTY" or "SAY";
-        elseif not TacticaDB.Settings.UseRaidChat then
-            chatType = "PARTY";
-        end
-        
+		-- We only post to raid
+		local chatType = "RAID"
+
         for line in string.gmatch(tacticText, "([^\n]+)") do
             SendChatMessage(line, chatType);
         end
