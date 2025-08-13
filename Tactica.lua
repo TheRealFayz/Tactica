@@ -1,6 +1,160 @@
 -- Tactica.lua - Boss strategy helper for Turtle WoW
 -- Created by Doite
 
+-------------------------------------------------
+-- VERSION CHECK
+-------------------------------------------------
+local TACTICA_PREFIX = "TACTICA"
+
+local function tlen(t)
+  if table and table.getn then return table.getn(t) end
+  local n=0; for _ in pairs(t) do n=n+1 end; return n
+end
+
+local function Tactica_GetVersion()
+  local v
+  if GetAddOnMetadata then
+    v = GetAddOnMetadata("Tactica", "Version") or GetAddOnMetadata("Tactica", "X-Version")
+  end
+  v = v or (Tactica and Tactica.Version) or tostring(TacticaDB and TacticaDB.version or "0")
+  return tostring(v or "0")
+end
+
+local function VersionIsNewer(a, b)
+  if type(a) ~= "string" then a = tostring(a or "0") end
+  if type(b) ~= "string" then b = tostring(b or "0") end
+  local ai, bi = {}, {}
+  for n in string.gmatch(a, "%d+") do table.insert(ai, tonumber(n) or 0) end
+  for n in string.gmatch(b, "%d+") do table.insert(bi, tonumber(n) or 0) end
+  local m = math.max(tlen(ai), tlen(bi))
+  for i=1,m do
+    local av = ai[i] or 0
+    local bv = bi[i] or 0
+    if bv > av then return true end
+    if bv < av then return false end
+  end
+  return false
+end
+
+local _verGuildAnnounced, _verRaidAnnounced, _verNotifiedOnce = false, false, false
+local _verLastEcho = 0
+
+local _laterQueue = {}
+local _laterFrame = CreateFrame("Frame")
+_laterFrame:Hide()
+_laterFrame:SetScript("OnUpdate", function()
+  for i = tlen(_laterQueue), 1, -1 do
+    local job = _laterQueue[i]
+    local __dt = (arg1 and tonumber(arg1)) or 0.02; job.t = job.t - __dt
+    if job.t <= 0 then
+      table.remove(_laterQueue, i)
+      local ok, err = pcall(job.f)
+    end
+  end
+  if tlen(_laterQueue) == 0 then _laterFrame:Hide() end
+end)
+local function RunLaterTactica(delay, fn)
+  table.insert(_laterQueue, { t = math.max(0.01, delay or 0.01), f = fn })
+  _laterFrame:Show()
+end
+
+local function Tactica_BroadcastVersion(channel)
+  local msg = "VER:" .. Tactica_GetVersion()
+  if SendAddonMessage then SendAddonMessage(TACTICA_PREFIX, msg, channel) end
+end
+
+local function Tactica_BroadcastVersionAll()
+  local sent = false
+  -- RAID
+  if UnitInRaid and UnitInRaid("player") then
+    if SendAddonMessage then SendAddonMessage(TACTICA_PREFIX, "TACTICA_VER:"..Tactica_GetVersion(), "RAID") end
+    sent = true
+  end
+  -- PARTY (only if not in raid)
+  if (not (UnitInRaid and UnitInRaid("player"))) and (GetNumPartyMembers and GetNumPartyMembers() > 0) then
+    if SendAddonMessage then SendAddonMessage(TACTICA_PREFIX, "TACTICA_VER:"..Tactica_GetVersion(), "PARTY") end
+    sent = true
+  end
+  -- GUILD
+  if (IsInGuild and IsInGuild()) then
+    if SendAddonMessage then SendAddonMessage(TACTICA_PREFIX, "TACTICA_VER:"..Tactica_GetVersion(), "GUILD") end
+    sent = true
+  end
+  return sent
+end
+
+local function Tactica_OnAddonMessageVersion(prefix, text, sender, channel)
+  if prefix ~= TACTICA_PREFIX then return end
+  if type(text) ~= "string" then return end
+  local mine = Tactica_GetVersion()
+  -- Handle legacy "VER:" and new "TACTICA_VER:"
+  if string.sub(text,1,4) == "VER:" then
+    local other = string.sub(text, 5)
+    if not _verNotifiedOnce and VersionIsNewer(mine, other) then
+      _verNotifiedOnce = true
+      RunLaterTactica(8, function()
+        Tactica:PrintMessage(string.format("A newer Tactica is available (yours: %s, latest seen: %s). Consider updating.", tostring(mine), tostring(other)))
+      end)
+    end
+    -- Echo version back on same channel so older clients hear newer versions
+    local me = UnitName and UnitName("player") or nil
+    if sender ~= me and channel then Tactica_BroadcastVersion(channel) end
+    return
+  end
+  if string.sub(text,1,12) == "TACTICA_VER:" then
+    local other = string.sub(text, 13)
+    if not _verNotifiedOnce and VersionIsNewer(mine, other) then
+      _verNotifiedOnce = true
+      RunLaterTactica(8, function()
+        Tactica:PrintMessage(string.format("A newer Tactica is available (yours: %s, latest seen: %s). Consider updating.", tostring(mine), tostring(other)))
+      end)
+    end
+    -- Echo version back on same channel so older/newer clients hear it (rate-limited)
+    local me = UnitName and UnitName("player") or nil
+    if sender ~= me and channel then
+      local now = (GetTime and GetTime()) or 0
+      if now - _verLastEcho > 10 then _verLastEcho = now; SendAddonMessage("TACTICA", "TACTICA_VER:"..tostring(mine), channel) end
+    end
+    return
+  end
+  if text == "TACTICA_WHO" then
+    if channel then
+      local msg = "TACTICA_ME:" .. tostring(mine)
+      if SendAddonMessage then SendAddonMessage(TACTICA_PREFIX, msg, channel) end
+    end
+    return
+  end
+  if string.sub(text,1,11) == "TACTICA_ME:" then
+    local ver = string.sub(text, 12)
+    local relation = VersionIsNewer(mine, ver) and "older" or (VersionIsNewer(ver, mine) and "newer" or "equal")
+    local frame = (DEFAULT_CHAT_FRAME or ChatFrame1)
+    if frame then frame:AddMessage(string.format("|cff33ff99Tactica:|r %s has %s (you: %s) [%s]", tostring(sender or "?"), tostring(ver or "?"), tostring(mine), relation)) end
+    return
+  end
+
+  if not _verNotifiedOnce and VersionIsNewer(mine, other) then
+    _verNotifiedOnce = true
+    RunLaterTactica(8, function()
+      Tactica:PrintMessage(string.format(
+        "A newer Tactica is available (yours: %s, latest seen: %s). Consider updating.",
+        tostring(mine), tostring(other)))
+    end)
+  end
+end
+
+local function Tactica_MaybePingGuild()
+  if _verGuildAnnounced then return end
+  _verGuildAnnounced = true
+  RunLaterTactica(10, function() Tactica_BroadcastVersion("GUILD") end)
+end
+
+local function Tactica_MaybePingRaid()
+  if _verRaidAnnounced then return end
+  if not UnitInRaid or not UnitInRaid("player") then return end
+  _verRaidAnnounced = true
+  RunLaterTactica(3, function() Tactica_BroadcastVersion("RAID") end)
+end
+
 Tactica = {
     SavedVariablesVersion = 1,
     Data = {},
@@ -78,9 +232,12 @@ end
 -- Initialize the addon
 local f = CreateFrame("Frame");
 f:RegisterEvent("ADDON_LOADED");
-f:RegisterEvent("PLAYER_LOGIN");
+f:RegisterEvent("PLAYER_LOGIN")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD");
 f:RegisterEvent("PLAYER_LOGOUT");
 f:RegisterEvent("PLAYER_TARGET_CHANGED");
+f:RegisterEvent("CHAT_MSG_ADDON")
+f:RegisterEvent("RAID_ROSTER_UPDATE")
 local function InitializeSavedVariables()
     if not TacticaDB then
         TacticaDB = {
@@ -103,7 +260,7 @@ local function InitializeSavedVariables()
     else
         TacticaDB.version = TacticaDB.version or Tactica.SavedVariablesVersion
         TacticaDB.CustomTactics = TacticaDB.CustomTactics or {}
-        TacticaDB.Healers = TacticaDB.Healers or {} -- NEW: ensure table exists on old DBs
+        TacticaDB.Healers = TacticaDB.Healers or {}
         TacticaDB.Settings = TacticaDB.Settings or {
             UseRaidWarning = true,
             UseRaidChat = true,
@@ -141,7 +298,19 @@ f:SetScript("OnEvent", function()
     if event == "ADDON_LOADED" and arg1 == "Tactica" then
         InitializeSavedVariables()
         DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r.");
-    elseif event == "PLAYER_LOGIN" then
+    elseif event == "PLAYER_ENTERING_WORLD" then
+    RunLaterTactica(10, function() Tactica_BroadcastVersionAll() end)
+
+  elseif event == "RAID_ROSTER_UPDATE" then
+    if not _verRaidAnnounced and UnitInRaid and UnitInRaid("player") then
+      _verRaidAnnounced = true
+      RunLaterTactica(3, function() Tactica_BroadcastVersionAll() end)
+    end
+  elseif event == "CHAT_MSG_ADDON" then
+        -- Version traffic handling
+        Tactica_OnAddonMessageVersion(arg1, arg2, arg4, arg3)
+
+  elseif event == "PLAYER_LOGIN" then
         if not TacticaDB then
             InitializeSavedVariables()
         end
@@ -167,7 +336,7 @@ end
 function Tactica:HandleTargetChange()
     -- Clear recently posted if player died (wipe detection)
     if UnitIsDead("player") then
-        wipe(self.RecentlyPosted)
+        if type(wipe)=="function" then wipe(self.RecentlyPosted) else for k in pairs(self.RecentlyPosted) do self.RecentlyPosted[k]=nil end end
         return
     end
     
@@ -1494,6 +1663,33 @@ function Tactica:ShowRemovePopup()
     end
     
     self.removeFrame:Show()
+end
+
+-------------------------------------------------
+-- VERSION DEBUG
+-------------------------------------------------
+
+-- /ttversion: show current Tactica version
+SLASH_TTVERSION1 = "/ttversion"
+SlashCmdList["TTVERSION"] = function()
+  local v = Tactica_GetVersion and Tactica_GetVersion() or (Tactica and Tactica.Version) or (TacticaDB and TacticaDB.version) or "unknown"
+  (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage("|cff33ff99Tactica:|r Version " .. tostring(v))
+end
+
+
+-- /ttversionwho: debug WHO for versions
+SLASH_TTVERSIONWHO1 = "/ttversionwho"
+SlashCmdList["TTVERSIONWHO"] = function()
+  (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage("|cff33ff99Tactica:|r version WHO sent. Listening for replies...")
+  local sent = false
+  if UnitInRaid and UnitInRaid("player") then
+    SendAddonMessage("TACTICA", "TACTICA_WHO", "RAID"); sent = true
+  elseif (GetNumPartyMembers and GetNumPartyMembers() > 0) then
+    SendAddonMessage("TACTICA", "TACTICA_WHO", "PARTY"); sent = true
+  elseif IsInGuild and IsInGuild() then
+    SendAddonMessage("TACTICA", "TACTICA_WHO", "GUILD"); sent = true
+  end
+  if not sent then (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage("|cff33ff99Tactica:|r No channels available (raid/party/guild).") end
 end
 
 -------------------------------------------------

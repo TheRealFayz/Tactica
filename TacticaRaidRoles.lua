@@ -302,6 +302,13 @@ local function SendHelloRequest()
 end
 
 local function OnAddonMessage()
+  -- Ignore version control messages from core
+  if type(arg2)=="string" then
+    local s = arg2
+    if string.sub(s,1,4)=="VER:" or string.sub(s,1,12)=="TACTICA_VER:" or s=="TACTICA_WHO" or string.sub(s,1,11)=="TACTICA_ME:" then return end
+  end
+  -- Ignore version pings from core
+  if type(arg2)=="string" and string.sub(arg2,1,4)=="VER:" then return end
   local prefix = arg1
   local text   = arg2
   local sender = arg4
