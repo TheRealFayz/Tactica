@@ -1931,22 +1931,22 @@ Tactica.DefaultData = {
     },
     ["Lower Karazhan Halls"] = {
         ["Master Blacksmith Rolfen"] = {
-            ["Default"] = "Tanks, DPS and Healers: Tank and spank."
+            ["Default"] = "Tanks: MT, keep the boss where he stands. OT, pick up the adds and stack them on the boss for splash damage.\nDPS: Focus the boss, and splash damage adds down.\nMages and Druids: Decuse is your top priority.\nHealers: Focus tanks, then top of the rest of the raid."
         },
         ["Brood Queen Araxxna"] = {
-            ["Default"] = "Tanks: 1 tank. Face away.\nDPS: Focus and kill eggs as they spawn, stay max range.\nHealers: Keep poison cleansed/cured quickly.\nClass Specific: Druids, Paladins, Shamans cleanse/cure poison.\nBoss Ability: Frequent poison application."
+            ["Default"] = "Tanks: Turn the boss 180 degrees, and face her away from the raid.\nDPS: Focus the boss until eggs are spawned. Killing eggs is the top priority for all DPS.\nHealers: Focus the tank, then heal those with poisons.\nClass Specific: Druids, Paladins, Shamans cleanse/cure poison.\nBoss Ability: Frequent poison application."
         },
         ["Grizikil"] = {
-            ["Default"] = "Tanks: 1 tank, move out of Rain of Fire or Blast Wave AoE.\nDPS: Focus boss, avoid ground/boss AoE.\nHealers: Avoid Rain of Fire, AoE, spread to cover all. Care for damage surge from abilties.\nClass Specific: Rogues / Warriors can interupt the blast wave AoE.\nBoss Ability: Rain of Fire, blast wave AoE (interuptable)."
+            ["Default"] = "Tanks: Move out of Rain of Fire or Blast Wave AoE.\nDPS: Focus boss, and avoid Rain of Fire, and Blast Wave.\nHealers: Avoid Rain of Fire and Blast Wave. Damage can spike when either ability is active.\nClass Specific: Rogues and Warriors can interrupt the Blast Wave ability."
         },
         ["Clawlord Howlfang"] = {
-            ["Default"] = "Tanks: 2 tanks. MT engages and tanks Howlfang where he stands. OT hides behind corner until MT gets 15 stacks, then run in and taunts. Swap back and forth until stacks drop.\nDPS: Threat control. Melee can stay in; avoid getting hit. Ranged stay max range.\nHealers: Max range. Watch for heavy tank damage during swaps or enrage.\nClass Specific: Mages/Druids decurse tanks instantly.\nBoss Ability: Armor -5% & damage -5% reduction stack, 75% heal reduction curse, periodic enrage."
+            ["Default"] = "Tanks: MT will engage Howlfang where he stands. OT will hide behind a corner until the MT gets 15 stacks. OT will run in and taunt the boss when MT has 15 stacks. MT will hide to reset their stacks, then relieve the OT.  Repeat this swap until the boss is dead.\nMDPS: Watch your threat on this boss, he will one-shot a DPS. DPS do not need to reset stacks, and can stay in the entire fight as they should not pull agro and get hit.\nRDPS: Watch your threat on this boss, he will one-shot a DPS. DPS do not need to reset stacks, and can stay in the entire fight as they should not pull agro and get hit. Stay at max range from the boss.\nHealers: Stay max range from the boss. Watch for large damage spikes on the tanks during swaps and enrage.\nClass Specific: Mages/Druids decursing tanks is your top priority.  Decursing on anyone else is not needed.\nAdditional Information: If you are going to wipe on this boss, jump over the edge into the room below to reset the boss and avoid a death."
         },
         ["Lord Blackwald II"] = {
-            ["Default"] = "Tanks: 1–2 tanks. MT on boss; OT can pick up add (if not MT can pick it up as well).\nDPS: Burn boss; kill add when it spawns.\nHealers: Watch tank during add phase, decurse and outheal life drain.\nClass Specific: Mages/Druids decurse -20% stats.\nBoss Ability: Curses, spawns add, life drain."
+            ["Default"] = "Tanks: MT, keep the boss where he stands. OT, pick up the adds and stack them on the boss for splash damage.\nDPS: Focus the boss, and splash damage adds down.\nMages and Druids: Decuse is your top priority as this lowers all stats by 20%.\nHealers: Focus tanks, then top of the rest of the raid.
         },
         ["Moroes"] = {
-            ["Default"] = "Tanks: 2 tanks, stay high on threat. Boss sleeps/kicks causing full threat loss—OT taunts immediately. Swap back and forth when abilties happen.\nDPS: Spread out to avoid AoE silence and overlap effects, during threat drop.\nHealers: Spread to avoid AoE silence during threat drop, maintain heals during swaps.\nClass Specific: Mages/Druids decurse 60% cast speed curse.\nBoss Ability: AoE silence, Sleep, Kick, 60% slower casting speed curse."
+            ["Default"] = "Tanks: Both tanks should stay 1 and 2 on threat at all times. MT will pick up the boss from behind.  OT should start the fight with the out-of-combat boss looking at him. The boss sleeps and kicks, causing a full threat loss for the MT.  The OT should be second on threat and should taunt immediately just to be safe. Once the MT is active again, they should taunt the boss back until the next rotation.\nDPS: Make sure the tanks are 1 and 2 on threat at all times. If you get agro, run straight to the tanks. Spread out to avoid more than one person being hit by the AoE silence and overlap effects. Melee should ideally stand on the sides of the boss.\nHealers: Spread out to avoid more than one person being hit by the AoE silence and overlap effects. Maintain heals during tank swaps.\nClass Specific: Mages and Druids, decursing is your top priority as the curse lowers cast speed by 60%."
         }
     },
     ["Upper Karazhan Halls"] = {
