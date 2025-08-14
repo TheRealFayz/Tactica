@@ -250,6 +250,10 @@ local function InitializeSavedVariables()
                 UsePartyChat = false,
                 PopupScale = 1.0,
 				AutoPostOnBoss = true,
+				Loot = {
+					AutoMasterLoot = true, 
+					AutoGroupPopup = true, 
+				},
                 PostFrame = {
                     locked = false,
                     position = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = 0 }
@@ -276,6 +280,15 @@ local function InitializeSavedVariables()
             position = { point = "CENTER", relativeTo = "UIParent", relativePoint = "CENTER", x = 0, y = 0 }
         }
     end
+	
+		-- ensure Loot table and defaults exist
+	TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
+	if TacticaDB.Settings.Loot.AutoMasterLoot == nil then
+		TacticaDB.Settings.Loot.AutoMasterLoot = true
+	end
+	if TacticaDB.Settings.Loot.AutoGroupPopup == nil then
+		TacticaDB.Settings.Loot.AutoGroupPopup = true
+	end
 
     -- Legacy migration block (kept as-is)
     if Tactica_SavedVariables then
@@ -297,7 +310,10 @@ end
 f:SetScript("OnEvent", function()
     if event == "ADDON_LOADED" and arg1 == "Tactica" then
         InitializeSavedVariables()
-        DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r.");
+        RunLaterTactica(1, function()
+		  local cf = DEFAULT_CHAT_FRAME or ChatFrame1
+		  cf:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r.")
+		end)
     elseif event == "PLAYER_ENTERING_WORLD" then
     RunLaterTactica(10, function() Tactica_BroadcastVersionAll() end)
 
@@ -349,6 +365,14 @@ function Tactica:HandleTargetChange()
     if not raidName or not bossName then
         return
     end
+	
+	-- If enabled, let the loot module flip Master Loot when boss is targeted
+	if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoMasterLoot then
+		if TacticaLoot_OnBossTargeted then
+			TacticaLoot_OnBossTargeted(raidName, bossName)
+		end
+	end
+
     
 	    -- Respect user setting to disable auto-popup, but show a one-time hint
     if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == false then
@@ -473,8 +497,11 @@ function Tactica:CommandHandler(msg)
     local command = string.lower(args[1] or "")
 
     -- Always allow "help", "list", "add", and "remove"
-    if command == "" or command == "help" then
-        self:PrintHelp()
+    if command == "" then
+		self:ShowPostPopup(true)
+	elseif command == "help" then
+		self:PrintHelp()
+
 
     elseif command == "list" then
         self:ListAvailableTactics()
@@ -1115,7 +1142,7 @@ function Tactica:CreatePostFrame()
     -- Main frame
     local f = CreateFrame("Frame", "TacticaPostFrame", UIParent)
     f:SetWidth(220)
-    f:SetHeight(185)
+    f:SetHeight(225)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -1226,6 +1253,19 @@ function Tactica:CreatePostFrame()
 		
         -- Restore position
         Tactica:RestorePostFramePosition()
+		
+				-- keep loot checkboxes in sync with DB whenever the frame opens
+		if TacticaAutoMasterLootCB then
+		  TacticaAutoMasterLootCB:SetChecked(
+			TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoMasterLoot
+		  )
+		end
+		if TacticaAutoGroupPopupCB then
+		  TacticaAutoGroupPopupCB:SetChecked(
+			TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoGroupPopup
+		  )
+		end
+
     end)
 
     -- Post to Raid (bottom-right, leader/assist only)
@@ -1291,11 +1331,11 @@ function Tactica:CreatePostFrame()
 	  -- Auto-open on boss (checkbox)
     local autoCB = CreateFrame("CheckButton", "TacticaAutoPostCheckbox", f, "UICheckButtonTemplate")
     autoCB:SetWidth(24); autoCB:SetHeight(24)
-    autoCB:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 40)
+    autoCB:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 80)
 
     local label = getglobal("TacticaAutoPostCheckboxText")
     if label then
-        label:SetText("Auto-open on boss")
+        label:SetText("Auto-open Tactica on boss")
     end
 
     autoCB:SetChecked(not (TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == false))
@@ -1311,6 +1351,42 @@ function Tactica:CreatePostFrame()
             Tactica:PrintMessage("Auto-popup is |cffff5555OFF|r. Use '/tt post' or '/tt autopost' to enable.")
         end
     end)
+	
+		-- Auto Master Loot checkbox (below Auto-open)
+	local autoML = CreateFrame("CheckButton", "TacticaAutoMasterLootCB", f, "UICheckButtonTemplate")
+	autoML:SetWidth(24); autoML:SetHeight(24)
+	autoML:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 60)
+	local autoMLTxt = getglobal("TacticaAutoMasterLootCBText")
+	if autoMLTxt then autoMLTxt:SetText("Auto Master Loot on boss") end
+	autoML:SetChecked(TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoMasterLoot)
+	autoML:SetScript("OnClick", function()
+		if not (TacticaDB and TacticaDB.Settings) then return end
+		TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
+		TacticaDB.Settings.Loot.AutoMasterLoot = autoML:GetChecked() and true or false
+		if TacticaDB.Settings.Loot.AutoMasterLoot then
+			Tactica:PrintMessage("Auto Master Loot is |cff00ff00ON|r.")
+		else
+			Tactica:PrintMessage("Auto Master Loot is |cffff5555OFF|r.")
+		end
+	end)
+
+	-- Group Loot popup checkbox (to the right of Auto-ML)
+	local autoGL = CreateFrame("CheckButton", "TacticaAutoGroupPopupCB", f, "UICheckButtonTemplate")
+	autoGL:SetWidth(24); autoGL:SetHeight(24)
+	autoGL:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 40)
+	local autoGLTxt = getglobal("TacticaAutoGroupPopupCBText")
+	if autoGLTxt then autoGLTxt:SetText("Ask to switch to Group Loot") end
+	autoGL:SetChecked(TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoGroupPopup)
+	autoGL:SetScript("OnClick", function()
+		if not (TacticaDB and TacticaDB.Settings) then return end
+		TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
+		TacticaDB.Settings.Loot.AutoGroupPopup = autoGL:GetChecked() and true or false
+		if TacticaDB.Settings.Loot.AutoGroupPopup then
+			Tactica:PrintMessage("Group Loot popup is |cff00ff00ON|r.")
+		else
+			Tactica:PrintMessage("Group Loot popup is |cffff5555OFF|r.")
+		end
+	end)
 
     self.postFrame = f
 end
@@ -1690,6 +1766,16 @@ SlashCmdList["TTVERSIONWHO"] = function()
     SendAddonMessage("TACTICA", "TACTICA_WHO", "GUILD"); sent = true
   end
   if not sent then (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage("|cff33ff99Tactica:|r No channels available (raid/party/guild).") end
+end
+
+-- /tt_loot: Shows loot frame
+SLASH_TTACTICALOOT1 = "/tt_loot"
+SlashCmdList["TTACTICALOOT"] = function()
+  if TacticaLoot_ShowPopup then
+    TacticaLoot_ShowPopup()
+  else
+    (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage("|cffff5555Tactica:|r Loot module not loaded.")
+  end
 end
 
 -------------------------------------------------
