@@ -11,7 +11,7 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 - `/tt add` to add your custom tactics ("enter" for line breaks will divide tactic into separate /raid msg's).
 - `/tt remove` to remove your custom tactics.
 - `/tt <Raid Name>,<Boss Name>,[Tactic Name(optional)]` for macro use of Tactica tactics.
-<img width="272" height="279" alt="Tactica-post" src="https://github.com/user-attachments/assets/0c723a7b-9789-4e3d-9cdd-3cc281d7442e" />
+<img width="269" height="225" alt="image" src="https://github.com/user-attachments/assets/1831fbbb-7480-44e6-bc9d-11d3fea815b9" />
 <img width="496" height="372" alt="Tactica Add" src="https://github.com/user-attachments/assets/383e90da-8d17-4957-8306-3c48e1798d18" />
 
 ### 2. Organize your comp at a glance
@@ -33,6 +33,7 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 - `/tt options` or `/tactica options` — open the option UI
 - `/tt help` or `/tactica help` — full command list
 - Toggle auto behaviors in the option UI (checkboxes), or use the slash commands mentioned in help.
+<img width="288" height="174" alt="image" src="https://github.com/user-attachments/assets/d5d322dd-9e92-447d-892c-b896e787ce1d" />
 
 ## Installation
 1.  Navigate to your World of Warcraft installation folder.
