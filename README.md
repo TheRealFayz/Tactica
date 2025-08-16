@@ -5,12 +5,12 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 ## What it does (TL;DR)
 ### 1. Announce tactics fast
 - Post default or custom strategies to self or raid with one click or /tt commands. Auto-popup on boss (toggleable).
-- `/tt` or `/tt post` for settings and frame
-- `/tt auto` to manually toggle the popup
-- `/tt list` for all raid tactics available (default and custom)
-- `/tt add` to add your custom tactics ("enter" for line breaks will divide tactic into separate /raid msg's)
-- `/tt remove` to remove your custom tactics
-- `/tt <Raid Name>,<Boss Name>,[Tactic Name(optional)]` for macro use of Tactica tactics
+- `/tt` or `/tt post` for settings and frame.
+- `/tt auto` to manually toggle the popup _(note: this is also available via /tt options)_.
+- `/tt list` for all raid tactics available (default and custom).
+- `/tt add` to add your custom tactics ("enter" for line breaks will divide tactic into separate /raid msg's).
+- `/tt remove` to remove your custom tactics.
+- `/tt <Raid Name>,<Boss Name>,[Tactic Name(optional)]` for macro use of Tactica tactics.
 <img width="272" height="279" alt="Tactica-post" src="https://github.com/user-attachments/assets/0c723a7b-9789-4e3d-9cdd-3cc281d7442e" />
 <img width="496" height="372" alt="Tactica Add" src="https://github.com/user-attachments/assets/383e90da-8d17-4957-8306-3c48e1798d18" />
 
@@ -18,20 +18,21 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 - Right-click raid roster to Toggle as Healer / DPS / Tank. Roles sync to everyone running Tactica; latest leader/assist decision wins.
 - Clean indicators next to names (H/D/T).
 - pfUI communication: Tactica tank role also flags tank role in pfUI when available (requires SuperWoW).
-- `/ttpush` or `/tactica pushroles` (raid leaders) broadcast current role list manually to the raid (should not be needed)
-- `/ttclear` or `/tactica clearroles` clear all roles (local; if raid leader, clears for everyone)
+- `/tt roles` to post the assigned and number of tanks, healers and DPS, respectively, to the raid.
+- `/tt rolewhisper` toggle the role whisper function on/off _(note: this is also available via /tt options)_.
 <img width="492" height="327" alt="Tactica - Roster" src="https://github.com/user-attachments/assets/991708d0-b30d-402f-9eff-57cb767b9859" />
 
 ### 3. Loot mode QoL for bosses
-- Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot).
+- Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). _(Note: this is available via /tt options)_.
 - Works even when ML ≠ RL: the ML’s client pings the RL via addon message when the corpse is emptied.
 - “Don’t ask again this raid” (raid-scoped) and global on/off setting.
 <img width="287" height="161" alt="Tactica-loot" src="https://github.com/user-attachments/assets/f8fcd04a-8060-4fa1-bb13-7d76810d9800" />
 
 ## Quick start
-- `/tt` — open the Post UI
-- `/tt help` — full command list
-- Toggle auto behaviors in the Post UI (checkboxes), or use the slash options mentioned in help.
+- `/tt` or `/tactica` — open the Post UI
+- `/tt options` or `/tactica options` — open the option UI
+- `/tt help` or `/tactica help` — full command list
+- Toggle auto behaviors in the option UI (checkboxes), or use the slash commands mentioned in help.
 
 ## Installation
 1.  Navigate to your World of Warcraft installation folder.
@@ -55,6 +56,10 @@ _`/tactica_loot` — shows the group loot question frame_
 _`/ttversion` Prints your local Tactica version (from the TOC)_
 
 _`/ttversionwho` Raid-only. Broadcasts a version “WHO” ping and prints replies (who’s newer/older/equal)._
+
+_`/ttpush` or `/tactica pushroles` (raid leaders) broadcast current role list manually to the raid (should not be needed)_
+
+_`/ttclear` or `/tactica clearroles` clear all roles (local; if raid leader, clears for everyone)_
 
 ## Special thanks to:
 [jrc13245](https://github.com/jrc13245/) - error catcher
