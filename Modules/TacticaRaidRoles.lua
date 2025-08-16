@@ -351,6 +351,19 @@ local function OnAddonMessage()
   end
 end
 
+-- Returns true if the named raid member is currently online
+local function IsRaidMemberOnline(target)
+  if not (UnitInRaid and UnitInRaid("player")) then return false end
+  local n = (GetNumRaidMembers and GetNumRaidMembers()) or 0
+  for i = 1, n do
+    local name, _, _, _, _, _, _, online = GetRaidRosterInfo(i)
+    if name == target then
+      return online and true or false
+    end
+  end
+  return false
+end
+
 ------------------------------------------------------------
 -- Context menu & click hook
 ------------------------------------------------------------
@@ -426,12 +439,61 @@ local function HandleMenuClick()
   suppressPfuiWrite = false
 
   if msg then
-    if type(Tactica_DecorateRaidRoster) == "function" then Tactica_DecorateRaidRoster() end
-    (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage(string.format("|cff33ff99Tactica:|r %s is now %s.", name, msg))
-    if IsSelfLeaderOrAssist() then
-      if newRole == nil then Broadcast_Clear(name) else Broadcast_Set(name, newRole) end
+	  if type(Tactica_DecorateRaidRoster) == "function" then Tactica_DecorateRaidRoster() end
+	  (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage(string.format("|cff33ff99Tactica:|r %s is now %s.", name, msg))
+
+	  if IsSelfLeaderOrAssist() then
+		-- broadcast stays leader/assist only
+		if newRole == nil then
+		  Broadcast_Clear(name)
+		else
+		  Broadcast_Set(name, newRole)
+		end
+
+		-- whisper is ALSO leader/assist only
+		if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.RoleWhisperEnabled ~= false then
+		  local me = UnitName and UnitName("player") or nil
+		  if me and me ~= name and IsRaidMemberOnline(name) then
+			local w
+			if newRole == "H" then
+			  w = "[Tactica]: You are marked as 'H' (Healer) on the raid roster."
+			elseif newRole == "T" then
+			  w = "[Tactica]: You are marked as 'T' (Tank) on the raid roster."
+			elseif newRole == "D" then
+			  w = "[Tactica]: You are marked as 'D' (DPS) on the raid roster."
+			else
+			  w = "[Tactica]: You are no longer marked on the raid roster."
+			end
+			if SendChatMessage then
+			  SendChatMessage(w, "WHISPER", nil, name)
+			end
+		  end
+		end
+	  end
+	end
+end
+
+local function MaybeWhisperRole(targetName, roleKeyOrNil)
+    -- respect toggle
+    if not (TacticaDB and TacticaDB.Settings and TacticaDB.Settings.RoleWhisperEnabled) then return end
+    -- do not whisper self
+    local me = UnitName and UnitName("player") or nil
+    if not targetName or targetName == me then return end
+
+    local msg
+    if roleKeyOrNil == "H" then
+        msg = "Tactica - You are marked as 'H' (Healer) on the raid roster."
+    elseif roleKeyOrNil == "T" then
+        msg = "Tactica - You are marked as 'T' (Tank) on the raid roster."
+    elseif roleKeyOrNil == "D" then
+        msg = "Tactica - You are marked as 'D' (DPS) on the raid roster."
+    else
+        msg = "Tactica - You are no longer marked on the raid roster."
     end
-  end
+
+    if SendChatMessage then
+        SendChatMessage(msg, "WHISPER", nil, targetName)
+    end
 end
 
 local function InstallClickHook()
