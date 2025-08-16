@@ -305,6 +305,36 @@ local function InitializeSavedVariables()
 	if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == nil then
 		TacticaDB.Settings.AutoPostOnBoss = true
 	end
+	
+	-- Ensure Settings table exists
+	if not TacticaDB.Settings then TacticaDB.Settings = {} end
+
+	-- Default: Auto-open Post UI on boss (ON)
+	if TacticaDB.Settings.AutoPostOnBoss == nil then
+	  TacticaDB.Settings.AutoPostOnBoss = true
+	end
+
+	-- Default: whisper confirmations on role change (ON)
+	if TacticaDB.Settings.RoleWhisperEnabled == nil then
+	  TacticaDB.Settings.RoleWhisperEnabled = true
+	end
+
+	-- Loot sub-table + defaults (both ON)
+	if not TacticaDB.Settings.Loot then TacticaDB.Settings.Loot = {} end
+	if TacticaDB.Settings.Loot.AutoMasterLoot == nil then
+	  TacticaDB.Settings.Loot.AutoMasterLoot = true
+	end
+	if TacticaDB.Settings.Loot.AutoGroupPopup == nil then
+	  TacticaDB.Settings.Loot.AutoGroupPopup = true
+	end
+
+		-- default: whisper a confirmation to the player whose role you change
+	if not TacticaDB.Settings.RoleWhisperEnabled ~= false then
+		-- keep it strictly boolean
+	end
+	if TacticaDB.Settings.RoleWhisperEnabled == nil then
+		TacticaDB.Settings.RoleWhisperEnabled = true
+	end
 end
 
 f:SetScript("OnEvent", function()
@@ -312,7 +342,7 @@ f:SetScript("OnEvent", function()
         InitializeSavedVariables()
         RunLaterTactica(1, function()
 		  local cf = DEFAULT_CHAT_FRAME or ChatFrame1
-		  cf:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r.")
+		  cf:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r or |cffffff00/tactica help|r.")
 		end)
     elseif event == "PLAYER_ENTERING_WORLD" then
     RunLaterTactica(10, function() Tactica_BroadcastVersionAll() end)
@@ -524,6 +554,21 @@ function Tactica:CommandHandler(msg)
 			self:PrintMessage("Auto-popup is |cff00ff00ON|r. It will open on boss targets.")
 		else
 			self:PrintMessage("Auto-popup is |cffff5555OFF|r. Use '/tt post' or '/tt autopost' to enable.")
+		end
+	
+	elseif command == "options" then
+		self:ShowOptionsFrame()
+
+	elseif command == "roles" or command == "role" then
+        self:PostRoleSummary()
+	
+	elseif command == "rolewhisper" then
+		if not TacticaDB or not TacticaDB.Settings then return end
+		TacticaDB.Settings.RoleWhisperEnabled = not TacticaDB.Settings.RoleWhisperEnabled
+		if TacticaDB.Settings.RoleWhisperEnabled then
+			self:PrintMessage("Role-whisper is |cff00ff00ON|r. Players get a whisper when you set/clear their role.")
+		else
+			self:PrintMessage("Role-whisper is |cffff5555OFF|r.")
 		end
 
     elseif command == "pushroles" then
@@ -820,6 +865,12 @@ function Tactica:PrintHelp()
     self:PrintMessage("    - Raid leaders only: push all role assignments (H/D/T) to the raid manually.");
 	self:PrintMessage("  |cffffff00/ttclear|r or |cffffff00/tt clearroles|r");
 	self:PrintMessage("    - Clear all role tags locally (Raid leaders: clears for the whole raid).");
+	self:PrintMessage("  |cffffff00/tt rolewhisper|r")
+	self:PrintMessage("    - Toggle whispering a confirmation to players when you mark/clear their role.")
+	self:PrintMessage("  |cffffff00/tt roles|r")
+    self:PrintMessage("    - Post Tanks/Healers/DPS to raid (DPS = the rest).")
+	self:PrintMessage("  |cffffff00/tt options|r")
+	self:PrintMessage("    - Open a small options panel for toggles.")
 	self:PrintMessage("  |cffffff00/w Doite|r");
     self:PrintMessage("    - Addon and tactics by Doite - msg if incorrect.");
 end
@@ -884,6 +935,229 @@ end
 
 function Tactica:PrintError(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cffff0000Tactica Error:|r "..msg);
+end
+
+-- Posts a role summary to RAID: Tanks / Healers / DPS (DPS = the rest of the raid)
+function Tactica:PostRoleSummary()
+    if not (UnitInRaid and UnitInRaid("player")) then
+        self:PrintError("You must be in a raid.")
+        return
+    end
+
+    local total = (GetNumRaidMembers and GetNumRaidMembers()) or 0
+    local tanks, healers = {}, {}
+
+    local T = (TacticaDB and TacticaDB.Tanks)   or {}
+    local H = (TacticaDB and TacticaDB.Healers) or {}
+
+    -- collect current raid members with T/H marks
+    for i = 1, total do
+        local name = GetRaidRosterInfo(i)
+        if name and name ~= "" then
+            if T[name] then
+                table.insert(tanks, name)
+            elseif H[name] then
+                table.insert(healers, name)
+            end
+        end
+    end
+
+    -- sort names (case-insensitive)
+    table.sort(tanks,   function(a,b) return string.lower(a) < string.lower(b) end)
+    table.sort(healers, function(a,b) return string.lower(a) < string.lower(b) end)
+
+    -- print helper (wraps if too long)
+    local function postNames(label, list)
+        local cnt  = (table.getn and table.getn(list)) or 0
+        local base = string.format("[Tactica]: %s - [%d]: ", label, cnt)
+        local cur  = base
+        local n    = (table.getn and table.getn(list)) or 0
+
+        for idx = 1, n do
+            local piece = (idx > 1 and ", " or "") .. list[idx]
+            if string.len(cur) + string.len(piece) > 230 then
+                SendChatMessage(cur, "RAID")
+                cur = "    " .. list[idx]
+            else
+                cur = cur .. piece
+            end
+        end
+        SendChatMessage(cur, "RAID")
+    end
+
+    postNames("Tanks",   tanks)
+    postNames("Healers", healers)
+
+    -- DPS = everyone not marked T/H (we don’t list names; just the count)
+    local nT       = (table.getn and table.getn(tanks))   or 0
+    local nH       = (table.getn and table.getn(healers)) or 0
+    local dpsTotal = total - nT - nH
+    if dpsTotal < 0 then dpsTotal = 0 end
+
+    local line = string.format("[Tactica]: DPS - [%d]: The rest of the raid.", dpsTotal)
+    SendChatMessage(line, "RAID")
+end
+
+-------------------------------------------------
+-- ADD OPTION UI
+-------------------------------------------------
+
+-- Helper: tint/untint the gear icon while Options is visible
+local function Tactica_SetOptionsButtonActive(active)
+  local btn = Tactica and Tactica.optionsButton
+  if not btn then return end
+  local nt = btn:GetNormalTexture()
+  local pt = btn.GetPushedTexture and btn:GetPushedTexture() or nil
+
+  if active then
+    -- grey while options are open
+    -- (tweak 0.6..0.8 for lighter/darker grey)
+    if nt then nt:SetVertexColor(0.7, 0.7, 0.7) end
+    if pt then pt:SetVertexColor(0.7, 0.7, 0.7) end
+  else
+    -- back to normal
+    if nt then nt:SetVertexColor(1, 1, 1) end
+    if pt then pt:SetVertexColor(1, 1, 1) end
+  end
+end
+
+function Tactica:ShowOptionsFrame()
+  if self.optionsFrame then
+    self.optionsFrame:Show()
+    if self.RefreshOptionsFrame then self:RefreshOptionsFrame() end
+    return
+  end
+
+  local f = CreateFrame("Frame", "TacticaOptionsFrame", UIParent)
+  f:SetWidth(235); f:SetHeight(145)
+  f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+  f:SetBackdrop({
+    bgFile  = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile= "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 32, edgeSize = 32,
+    insets = { left = 11, right = 12, top = 12, bottom = 11 }
+  })
+  f:SetFrameStrata("DIALOG")
+
+  local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  title:SetPoint("TOP", f, "TOP", 0, -10)
+  title:SetText("Tactica Options")
+
+  -- helper to build one checkbox + label, and return the checkbox
+  local function mkcb(name, y, text)
+    local cb = CreateFrame("CheckButton", name, f, "UICheckButtonTemplate")
+    cb:SetWidth(24); cb:SetHeight(24)
+    cb:SetPoint("TOPLEFT", f, "TOPLEFT", 12, y)
+    local label = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+    label:SetText(text)
+    return cb
+  end
+
+  -- create all checkboxes and keep references so we can refresh them
+  f.cbAutoPost    = mkcb("TacticaOptAutoPost",    -28, "Auto-open Post UI on boss")
+  f.cbAutoML      = mkcb("TacticaOptAutoML",      -48, "Auto Master Loot on boss (RL)")
+  f.cbAutoGroup   = mkcb("TacticaOptAutoGroup",   -68, "Loot popup after boss (RL)")
+  f.cbRoleWhisper = mkcb("TacticaOptRoleWhisper", -88, "Whisper role confirmations")
+
+  -- wire click handlers (use 'this' for Vanilla)
+  f.cbAutoPost:SetScript("OnClick", function()
+    if not (TacticaDB and TacticaDB.Settings) then return end
+    TacticaDB.Settings.AutoPostOnBoss = this:GetChecked() and true or false
+    if TacticaDB.Settings.AutoPostOnBoss then
+      Tactica.AutoPostHintShown = false
+      Tactica:PrintMessage("Auto-popup is |cff00ff00ON|r. It will open on boss targets.")
+    else
+      Tactica:PrintMessage("Auto-popup is |cffff5555OFF|r. Use '/tt post' or '/tt autopost' to enable.")
+    end
+  end)
+
+  f.cbAutoML:SetScript("OnClick", function()
+    if not (TacticaDB and TacticaDB.Settings) then return end
+    TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
+    TacticaDB.Settings.Loot.AutoMasterLoot = this:GetChecked() and true or false
+    if TacticaDB.Settings.Loot.AutoMasterLoot then
+      Tactica:PrintMessage("Auto Master Loot is |cff00ff00ON|r.")
+    else
+      Tactica:PrintMessage("Auto Master Loot is |cffff5555OFF|r.")
+    end
+  end)
+
+  f.cbAutoGroup:SetScript("OnClick", function()
+    if not (TacticaDB and TacticaDB.Settings) then return end
+    TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
+    TacticaDB.Settings.Loot.AutoGroupPopup = this:GetChecked() and true or false
+    if TacticaDB.Settings.Loot.AutoGroupPopup then
+      Tactica:PrintMessage("Group Loot popup is |cff00ff00ON|r.")
+    else
+      Tactica:PrintMessage("Group Loot popup is |cffff5555OFF|r.")
+    end
+  end)
+
+  f.cbRoleWhisper:SetScript("OnClick", function()
+    if not (TacticaDB and TacticaDB.Settings) then return end
+    TacticaDB.Settings.RoleWhisperEnabled = this:GetChecked() and true or false
+    if TacticaDB.Settings.RoleWhisperEnabled then
+      Tactica:PrintMessage("Role-whisper is |cff00ff00ON|r.")
+    else
+      Tactica:PrintMessage("Role-whisper is |cffff5555OFF|r.")
+    end
+  end)
+
+  -- initial sync on first open
+  if not TacticaDB then TacticaDB = {} end
+  if not TacticaDB.Settings then TacticaDB.Settings = {} end
+  if not TacticaDB.Settings.Loot then TacticaDB.Settings.Loot = {} end
+  local S = TacticaDB.Settings
+  local L = S.Loot
+  if f.cbAutoPost    then f.cbAutoPost:SetChecked(S.AutoPostOnBoss ~= false) end
+  if f.cbAutoML      then f.cbAutoML:SetChecked(L.AutoMasterLoot and true or false) end
+  if f.cbAutoGroup   then f.cbAutoGroup:SetChecked(L.AutoGroupPopup and true or false) end
+  if f.cbRoleWhisper then f.cbRoleWhisper:SetChecked(S.RoleWhisperEnabled and true or false) end
+
+  local close = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+  close:SetWidth(70); close:SetHeight(20)
+  close:SetPoint("BOTTOM", f, "BOTTOM", 0, 12)
+  close:SetText("Close")
+  close:SetScript("OnClick", function() f:Hide() end)
+
+  f:SetScript("OnShow", function()
+	  if Tactica.RefreshOptionsFrame then Tactica:RefreshOptionsFrame() end
+	  Tactica_SetOptionsButtonActive(true)
+	end)
+
+	f:SetScript("OnHide", function()
+	  Tactica_SetOptionsButtonActive(false)
+	end)
+
+	self.optionsFrame = f
+
+	-- ensure first-ever open tints immediately (not just via OnShow)
+	Tactica_SetOptionsButtonActive(true)
+
+	f:Show()
+end
+
+function Tactica:RefreshOptionsFrame()
+  local f = self.optionsFrame
+  if not f then return end
+
+  -- db guards
+  local S = TacticaDB and TacticaDB.Settings or nil
+  local L = S and S.Loot or nil
+
+  if f.cbAutoPost then
+    f.cbAutoPost:SetChecked(S and (S.AutoPostOnBoss ~= false))
+  end
+  if f.cbAutoML then
+    f.cbAutoML:SetChecked(L and L.AutoMasterLoot and true or false)
+  end
+  if f.cbAutoGroup then
+    f.cbAutoGroup:SetChecked(L and L.AutoGroupPopup and true or false)
+  end
+  if f.cbRoleWhisper then
+    f.cbRoleWhisper:SetChecked(S and S.RoleWhisperEnabled and true or false)
+  end
 end
 
 -------------------------------------------------
@@ -1142,7 +1416,7 @@ function Tactica:CreatePostFrame()
     -- Main frame
     local f = CreateFrame("Frame", "TacticaPostFrame", UIParent)
     f:SetWidth(220)
-    f:SetHeight(225)
+    f:SetHeight(185)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -1177,18 +1451,78 @@ function Tactica:CreatePostFrame()
     closeButton:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
     closeButton:SetScript("OnClick", function() f:Hide() end)
 
-    -- Lock button
-    local lockButton = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    lockButton:SetWidth(20)
-    lockButton:SetHeight(20)
-    lockButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -6)
-    lockButton:SetText(f.locked and "U" or "L")
-    lockButton:SetScript("OnClick", function()
-        f.locked = not f.locked
-        lockButton:SetText(f.locked and "U" or "L")
-        Tactica:SavePostFramePosition()
-    end)
+	 -- Lock button (icon)
+	local lockButton = CreateFrame("Button", "TacticaLockButton", f)
+	lockButton:SetWidth(18); lockButton:SetHeight(18)
+	lockButton:SetPoint("TOPRIGHT", closeButton, "TOPLEFT", 0, -7)
 
+	local function UpdateLockIcon()
+	  if f.locked then
+		lockButton:SetNormalTexture("Interface\\AddOns\\Tactica\\Media\\tactica-lock")
+	  else
+		lockButton:SetNormalTexture("Interface\\AddOns\\Tactica\\Media\\tactica-unlock")
+	  end
+	end
+
+	local function UpdateLockTooltip()
+	  if not GameTooltip then return end
+	  if GetMouseFocus and GetMouseFocus() == lockButton then
+		GameTooltip:ClearLines()
+		GameTooltip:SetOwner(lockButton, "ANCHOR_RIGHT")
+		GameTooltip:AddLine(f.locked and "Locked" or "Unlocked", 1, 1, 1)
+		GameTooltip:AddLine("Click to toggle", 0.9, 0.9, 0.9)
+		GameTooltip:Show()
+	  end
+	end
+
+	UpdateLockIcon()
+
+	lockButton:SetScript("OnClick", function()
+	  f.locked = not f.locked
+	  UpdateLockIcon()
+	  Tactica:SavePostFramePosition()
+	  -- refresh tooltip immediately if the cursor is still on the button
+	  UpdateLockTooltip()
+	end)
+
+	lockButton:SetScript("OnEnter", function()
+	  UpdateLockTooltip()
+	end)
+
+	lockButton:SetScript("OnLeave", function()
+	  if GameTooltip then GameTooltip:Hide() end
+	end)
+
+	-- Settings (Options) icon button next to the lock button
+	local optionsButton = CreateFrame("Button", nil, f)
+	optionsButton:SetWidth(20); optionsButton:SetHeight(20)
+	optionsButton:SetPoint("TOPRIGHT", lockButton, "TOPLEFT", -3, 1)
+
+	-- custom texture
+	optionsButton:SetNormalTexture("Interface\\AddOns\\Tactica\\Media\\tactica-gear")
+
+	optionsButton:SetScript("OnClick", function()
+	  if Tactica and Tactica.ShowOptionsFrame then
+		Tactica:ShowOptionsFrame()
+	  end
+	end)
+
+	-- tooltip
+	optionsButton:SetScript("OnEnter", function()
+	  if GameTooltip then
+		GameTooltip:SetOwner(optionsButton, "ANCHOR_RIGHT")
+		GameTooltip:AddLine("Tactica Options", 1, 1, 1)
+		GameTooltip:Show()
+	  end
+	end)
+	optionsButton:SetScript("OnLeave", function()
+	  if GameTooltip then GameTooltip:Hide() end
+	end)
+
+	-- store a reference so we can tint while options is open
+	Tactica.optionsButton = optionsButton
+
+	
     -- RAID DROPDOWN
     local raidLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     raidLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -40)
@@ -1253,6 +1587,8 @@ function Tactica:CreatePostFrame()
 		
         -- Restore position
         Tactica:RestorePostFramePosition()
+		
+		if UpdateLockIcon then UpdateLockIcon() end
 		
 				-- keep loot checkboxes in sync with DB whenever the frame opens
 		if TacticaAutoMasterLootCB then
@@ -1331,7 +1667,7 @@ function Tactica:CreatePostFrame()
 	  -- Auto-open on boss (checkbox)
     local autoCB = CreateFrame("CheckButton", "TacticaAutoPostCheckbox", f, "UICheckButtonTemplate")
     autoCB:SetWidth(24); autoCB:SetHeight(24)
-    autoCB:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 80)
+    autoCB:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 40)
 
     local label = getglobal("TacticaAutoPostCheckboxText")
     if label then
@@ -1352,7 +1688,7 @@ function Tactica:CreatePostFrame()
         end
     end)
 	
-		-- Auto Master Loot checkbox (below Auto-open)
+	--[[	-- Auto Master Loot checkbox (below Auto-open)
 	local autoML = CreateFrame("CheckButton", "TacticaAutoMasterLootCB", f, "UICheckButtonTemplate")
 	autoML:SetWidth(24); autoML:SetHeight(24)
 	autoML:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 60)
@@ -1386,7 +1722,7 @@ function Tactica:CreatePostFrame()
 		else
 			Tactica:PrintMessage("Group Loot popup is |cffff5555OFF|r.")
 		end
-	end)
+	end)]]
 
     self.postFrame = f
 end
