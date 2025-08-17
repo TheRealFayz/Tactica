@@ -6,6 +6,22 @@
 -------------------------------------------------
 local TACTICA_PREFIX = "TACTICA"
 
+-- Lua Compatibility: provide gmatch/match if missing
+do
+  -- In Lua 5.0, gmatch was gfind
+  if not string.gmatch and string.gfind then
+    string.gmatch = function(s, p) return string.gfind(s, p) end
+  end
+  -- Minimal match using find; returns the FIRST capture only
+  if not string.match then
+    string.match = function(s, p, init)
+      local _, _, cap1 = string.find(s, p, init)
+      return cap1
+    end
+  end
+end
+
+
 local function tlen(t)
   if table and table.getn then return table.getn(t) end
   local n=0; for _ in pairs(t) do n=n+1 end; return n
