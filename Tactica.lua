@@ -6,9 +6,9 @@
 -------------------------------------------------
 local TACTICA_PREFIX = "TACTICA"
 
--- Lua Compatibility: provide gmatch/match if missing
+-- Provide gmatch/match if missing
 do
-  -- In Lua 5.0, gmatch was gfind
+  -- gmatch was gfind
   if not string.gmatch and string.gfind then
     string.gmatch = function(s, p) return string.gfind(s, p) end
   end
@@ -20,7 +20,6 @@ do
     end
   end
 end
-
 
 local function tlen(t)
   if table and table.getn then return table.getn(t) end
@@ -200,26 +199,25 @@ Tactica.Aliases = {
     -- Bosses
     ["rag"] = "Ragnaros",
     ["mag"] = "Magmadar",
-    ["geh"] = "Gehennas",
-    ["garr"] = "Garr",
-    ["ged"] = "Baron Geddon",
+    ["geddon"] = "Baron Geddon",
     ["shaz"] = "Shazzrah",
-    ["sulf"] = "Sulfuron Harbinger",
+    ["sulfuron"] = "Sulfuron Harbinger",
+	["thaurissan"] = "Sorcerer-thane Thaurissan",
     ["golemagg"] = "Golemagg the Incinerator",
-    ["domo"] = "Majordomo Executus",
-    ["razor"] = "Razorgore the Untamed",
-    ["brood"] = "Broodlord Lashlayer",
+    ["majordomo"] = "Majordomo Executus",
+    ["razorgore"] = "Razorgore the Untamed",
+    ["broodlord"] = "Broodlord Lashlayer",
     ["ebon"] = "Ebonroc",
     ["fire"] = "Firemaw",
     ["flame"] = "Flamegor",
-    ["chroma"] = "Chromaggus",
+    ["chrom"] = "Chromaggus",
     ["vael"] = "Vaelastrasz the Corrupt",
     ["nef"] = "Nefarian",
     ["venoxis"] = "High Priest Venoxis",
     ["mandokir"] = "Bloodlord Mandokir",
     ["jindo"] = "Jin'do the Hexxer",
     ["kur"] = "Kurinnaxx",
-    ["raja"] = "General Rajaxx",
+    ["rajaxx"] = "General Rajaxx",
     ["skeram"] = "The Prophet Skeram",
     ["cthun"] = "C'Thun",
     ["patch"] = "Patchwerk",
@@ -233,6 +231,7 @@ Tactica.Aliases = {
 	["medivh"] = "Echo of Medivh",
 	["incantagos"] = "Lay-Watcher Incantagos",
 	["gnarlmoon"] = "Keeper Gnarlmoon",
+	["solnius"] = "Solnius the Awakener",
 }
 
 if not UIDropDownMenu_CreateInfo then
@@ -240,6 +239,74 @@ if not UIDropDownMenu_CreateInfo then
         return {}
     end
 end
+-------------------------------------------------
+-- BOSS NAME ALIASES (multi-NPC → one boss, with hostility mode)
+-------------------------------------------------
+Tactica.BossNameAliases = {} -- [lower(aliasName)] = array of { raid="...", boss="...", when="hostile|friendly|any" }
+
+function Tactica:RegisterBossAliases(raidName, bossName, aliases, when)
+  if not raidName or not bossName or not aliases then return end
+  local mode = when or "any"
+  for i = 1, table.getn(aliases) do
+    local alias = aliases[i]
+    if alias and alias ~= "" then
+      local key = string.lower(alias)
+      if not Tactica.BossNameAliases[key] then Tactica.BossNameAliases[key] = {} end
+      table.insert(Tactica.BossNameAliases[key], { raid = raidName, boss = bossName, when = mode })
+    end
+  end
+end
+
+-- ZG: Vilebranch Speaker (attack to trigger boss) → Bloodlord Mandokir
+Tactica:RegisterBossAliases("Zul'Gurub", "Bloodlord Mandokir", {
+  "Vilebranch Speaker",
+}, "hostile")
+
+-- MC: Smoldaris & Basalthar → either name should trigger that encounter (hostile NPCs)
+Tactica:RegisterBossAliases("Molten Core", "Smoldaris & Basalthar", {
+  "Smoldaris", "Basalthar",
+}, "hostile")
+
+-- MC: Majordomo Executus (friendly talk-to-summon) → Ragnaros
+Tactica:RegisterBossAliases("Molten Core", "Ragnaros", {
+  "Majordomo Executus",
+}, "friendly")
+
+-- BWL: Vaelastrasz (friendly talk-to-start) → Vaelastrasz
+Tactica:RegisterBossAliases("Blackwing Lair", "Vaelastrasz the Corrupt", {
+  "Vaelastrasz the Corrupt",
+}, "friendly")
+
+-- BWL: Lord Victor Nefarius (friendly talk-to-start) → Nefarian
+Tactica:RegisterBossAliases("Blackwing Lair", "Nefarian", {
+  "Lord Victor Nefarius",
+}, "friendly")
+
+-- AQ40: Princess Yauj, Vem, and Lord Kri (attack any) → Bug Trio
+Tactica:RegisterBossAliases("Temple of Ahn'Qiraj", "Silithid Royalty (Bug Trio)", {
+  "Princess Yauj","Vem","Lord Kri",
+}, "hostile")
+
+-- AQ40: Emperor Vek'lor and Emperor Vek'nilash (attack any) → Twin Emperors
+Tactica:RegisterBossAliases("Temple of Ahn'Qiraj", "Twin Emperors", {
+  "Emperor Vek'lor","Emperor Vek'nilash",
+}, "hostile")
+
+-- Naxx:  Thane Korth'azz, Lady Blaumeux, Sir Zeliek, and Highlord Mograine (attack any) → 4HM
+Tactica:RegisterBossAliases("Naxxramas", "The Four Horsemen", {
+  "Thane Korth'azz","Lady Blaumeux","Sir Zeliek","Highlord Mograine",
+}, "hostile")
+
+-- Kara40: Any key piece should count → King (Chess) (they’re hostile; “any” is also fine)
+Tactica:RegisterBossAliases("Lower Karazhan Halls", "King (Chess)", {
+  "King","Rook","Bishop","Knight","Decaying Bishop","Malfunctioning Knight",
+  "Broken Rook","Withering Pawn",
+}, "hostile")
+
+-- ES: Solnius before spoken to → Solnius hostile (later the dragon Solnius the Awakener)
+Tactica:RegisterBossAliases("Emerald Sanctum", "Solnius the Awakener", {
+  "Solnius",
+}, "friendly")
 
 -------------------------------------------------
 -- INITIALIZATION
@@ -454,23 +521,53 @@ function Tactica:HandleTargetChange()
 end
 
 function Tactica:IsBossTarget()
-    if not UnitExists("target") or UnitIsDead("target") or not UnitIsEnemy("player", "target") then
-        return nil, nil
-    end
-    
-    local targetName = UnitName("target")
-    if not targetName then return nil, nil end
-    
-    -- Check all raids and bosses
-    for raidName, bosses in pairs(self.Data) do
-        for bossName in pairs(bosses) do
-            if string.lower(bossName) == string.lower(targetName) then
-                return raidName, bossName
-            end
-        end
-    end
-    
+  if not UnitExists("target") or UnitIsDead("target") then
     return nil, nil
+  end
+
+  local targetName = UnitName("target")
+  if not targetName or targetName == "" then
+    return nil, nil
+  end
+
+  -- Determine friendliness/hostility
+  local isHostile = UnitCanAttack and UnitCanAttack("player", "target")
+  -- Treat "friendly" as "not hostile" for our purposes
+  local isFriendly = not isHostile
+
+  local lname = string.lower(targetName)
+
+  -- Alias match with conditional "when"
+  local entries = Tactica.BossNameAliases[lname]
+  if entries then
+    for i = 1, table.getn(entries) do
+      local e = entries[i]
+      local ok = (e.when == "any")
+                or (e.when == "hostile"  and isHostile)
+                or (e.when == "friendly" and isFriendly)
+      if ok then
+        local raidBlock = self.Data[e.raid]
+        if raidBlock and raidBlock[e.boss] then
+          return e.raid, e.boss
+        end
+      end
+    end
+  end
+
+  -- Direct boss-name match requires hostile (avoid false positives on friendlies)
+  if not isHostile then
+    return nil, nil
+  end
+
+  for raidName, bosses in pairs(self.Data) do
+    for bossName in pairs(bosses) do
+      if string.lower(bossName) == lname then
+        return raidName, bossName
+      end
+    end
+  end
+
+  return nil, nil
 end
 
 function Tactica:CanAutoPost()
@@ -2136,45 +2233,51 @@ end
 
 Tactica.DefaultData = {
     ["Molten Core"] = {
-        ["Lucifron"] = {
-            ["Default"] = "Tanks: Position the adds together, while the boss abit further away - all facing away from each other.\nDPS: Focus on adds first, avoid cleave. When both adds are dead, kill Lucifron.\nHealers: Focus healing tanks and players with Impending Doom.\nClass Specific: Mages/Druids/Priests/Paladins - Cleanse Curse of Lucifron and Impending Doom quickly (Prio)."
-        },
-        ["Magmadar"] = {
-            ["Default"] = "Tanks: Hold the boss facing away from the raid, but make sure your healers are aware of where you will be standing, so they can make sure to be in range.\nMDPS: Avoid fire patches. Move out during Panic/Frenzy and stand behind boss.\nRDPS: Stay at max range to avoid Panic. Focus boss after Frenzy ends\nHealers: Heal through fire spikes - focus tank.\nClass Specific: Hunters use Tranquilizing Shot to remove Frenzy. Priests rotate and use Fear Ward on tank (prio). Shaman in Tank group, use Tremor Totem infront of boss."
-        },
-        ["Gehennas"] = {
-            ["Default"] = "Tanks: Use Free Action potion at pull. Tank adds together away from range and healers and pull boss away from adds. Move boss/adds if Rain of Fire is on boss/adds.\nDPS: Kill adds first. Avoid Rain of Fire. MDPS benefit from using a Free Action Potion at pull (adds stun aoe).\nHealers: Focus tank, move out of Rain of Fire and decurse (if you can).\nClass Specific: Mages/Druids focus (prio) on curse removal. Gehennas's Curse (-75% healing)."
-        },
-        ["Garr"] = {
-            ["Default"] = "Tanks: Multiple tanks on adds (depending on gear 1-3). Tank adds with back towards wall and seperated by tank. Tank boss in middle of room/away from adds.\nDPS: Burn Garr first with the entire raid. Once Garr dies, kill the adds one by one. Stay away from dying adds—avoid being near when they explode.\nHealers: Assign at least one healer per tank holding an add. Stay spread to avoid Magmakin knockbacks and manage heavy add damage. Watch tanks closely—tank deaths can lead to uncontrolled adds and wipes.\nWarlocks: Use Banish on adds to control them safely. Can be assigned by raid lead."
-        },
-        ["Baron Geddon"] = {
-            ["Default"] = "Tanks: Only one tank needed for Baron Geddon; position him so ranged and healers are about 40 yards away. Be mindful when moving out during Inferno to avoid over‑ranging healers. Optional - use fire resistance gear to mitigate damage (recommended).\nDPS: Melee must run out during Inferno and return after. Ranged stack with healers at max range. Keep distance from bomb targets.\nHealers: Stack at max range, but stay in range to heal the tank. Bomb targets must be at full health and preferably shielded before explosion.\nClass Specific: Priests/Paladins dispel Ignite Mana (prio healers > casters > melee). Priests shield Living Bomb targets.\nBoss Ability: Baron casts Living Bomb on random players—run 30 yards away before exploding."
-        },
-        ["Shazzrah"] = {
-            ["Default"] = "Tanks: Only one tank needed; keep Shazzrah positioned away from ranged and healers. Backup tanks can taunt after teleports to re-establish threat quickly.\nDPS: Ranged should spread at max range to mitigate Arcane Explosion. Melee stay behind boss and reposition after teleports. Burn cooldowns here, to kill the boss as fast as possible.\nHealers: Focus on healing the tank and covering burst damage from Arcane Explosions post-Blink. Stay spread with line of sight to the raid group.\nClass Specific: Priests/Paladins dispel Deaden Magic (prio tanks > casters). Mages/Druids remove Shazzrah's Curse (prio tanks > casters > melee).\nBoss Ability: Shazzrah randomly Blinks and follows with Arcane Explosion—stop DPS briefly until tank re-establishes threat."
-        },
-        ["Sulfuron"] = {
-            ["Default"] = "Tanks: All tanks should focus on picking up adds. The MT can focus abit more on holding the boss.\nDPS: Cleve, AOE and single target down all adds. Kill boss after all adds are dead.\nHealers: Assign a healer to each tank. Focus on keeping each tank alive through the add pulls and burst damage.\nClass Specific: Warriors/Rogues interrupt Dark Mending on adds (prio primary target). So pick an add each to prioritize."
-        },
-        ["Golemagg"] = {
-            ["Default"] = "Tanks: Only one tank needed on Golemagg while other tanks picks up the adds and pulls them away behind the raid (not close to boss). Swap when tanking if stacks get high, keeping adds unengaged.\nDPS: Ignore the Core Hounds entirely; focus all damage on Golemagg. Melee stay behind the boss. If stacks get to high, just step away for a second.\nHealers: Focus healing on the tank handling Golemagg. Keep an eye on the tanks for the adds. Melee will take damage from impact."
-        },
-        ["Majordomo"] = {
-            ["Default"] = "Tanks: Only one tank needed for Majordomo - Tank him where and as he stands, picking him up and repositioned when teleported. Additional tanks pick up and hold 1-2 Flamewaker Elite / Healer. Pull adds away from raid and taunt quickly if Polymorph breaks.\nDPS: No-one attacks boss. Focus non-Polymorphed Healers first (small adds). Thereafter the big ones (or continue with healers until all are dead). Stop caster DPS when adds gain Magic Reflection.\nHealers: Focus on healing tanks (assign one for the Majordomo tank) and raid through burst damage from add casts.\nClass Specific: Mages apply Polymorph on Flamewaker Healers on pull. Casters avoid casting when adds are under Magic Reflection.\nOptionally: A Hunter can \"kite\" 1-2 Flamewaker Elite's, by targeting one to the left at pull and running towards Baron Geddon with the speed Aspect. Avoid unkilled packs, use slowing abilities/pet and do Feign Death when called for/when needed."
-        },
-        ["Ragnaros"] = {
-            ["Default"] = "Tanks: Atleast two tanks needed. Position 1 in front of Ragnaros, while the other stays back. Swap to 2nd tank after Wrath of Ragnaros knockbacks the 1st tank. Use maximum Fire Resistance gear (preferably 315 or more).\nDPS: Melee stack tightly behind the boss; ranged and healers spread out (≥ 8 yd). Watch for Wrath of Ragnaros—melee must back off together and not re-enter until the the ability is finished and (!) verified that the tank was not knockbacked.\nHealers: Stay spread (≥ 8 yd) to avoid Lava Burst knockbacks; keep tanks topped, especially during Wrath of Ragnaros bursts.\nClass Specific: Retribution Paladins, Melee Hunters and Enhancement Shamans (all melee mana-users), form a seperate melee group to the side of Ragnaros.\nBoss Ability: If Ragnaros submerge (rare) - tanks need to pick up and kite adds, DPS slow and kill adds quickly. Thereafter all reposition."
-        }
+		["Incindis"] = {
+			["Default"] = "Tanks: MT on boss, OT pick up adds from hatched eggs and move them aside. Face boss away. Move out of pull-in AoE.\nDPS: Kill spawned adds quickly. Focus boss—eggs can’t all be nuked before hatch. Run away when pulled in.\nHealers: Heal through pull-in AoE + add dmg. Watch MT.\nClass Specific: AoE classes handle adds fast. MDPS back off on pull-in.\nBoss Ability: Pull-in + AoE burst. Eggs hatch adds. Small AoE around boss."
+		},
+		["Lucifron"] = {
+			["Default"] = "Tanks: MT on boss, OT on adds. Face away. Adds respawn at 50%—tank and burn again.\nDPS: Kill adds every time they spawn, then boss. Avoid cleave.\nHealers: Focus tanks. Dispel Impending Doom and Decurse Curse of Lucifron.\nClass Specific: Mages/Druids/Priests/Paladins cleanse Curse + Doom fast.\nBoss Ability: Periodic add spawns. Curse of Lucifron + Impending Doom."
+		},
+		["Magmadar"] = {
+			["Default"] = "Tanks: MT face away. Watch position of healers.\nDPS: Stay behind boss. Move out during Frenzy/Panic. Avoid fire patches. Max range.\nHealers: Heal spikes, prio MT. Cover Panic. Fearward tank.\nClass Specific: Hunters Tranq Frenzy. Priests Fear Ward tank. Shamans Tremor Totem.\nBoss Ability: Frenzy (tranq), Panic fear, fire patches."
+		},
+		["Smoldaris & Basalthar"] = {
+			["Default"] = "Tanks: 1 tank each. Smoldaris: FR gear, tank on spot face away (will do a fire-cone). Basalthar: watch knockback, tank against wall (entrence).\nDPS: Attack Smoldaris or Basalthar depending on Molten Bulwark buff on boss. Avoid cone + AoE knockback. Swap between when called buff is up on bosses.\nHealers: Heavy tank heals on Smoldaris. Heal repositioning after knockbacks. Smoldaris will do AoE - heal through.\nClass Specific: FR pots useful. MDPS max melee range. Track Bulwark.\nBoss Ability: Smoldaris cone + AoE fire blasts. Basalthar knockback. Both will get buff Molten Bulwark (swap to other boss)."
+		},
+		["Garr"] = {
+			["Default"] = "Tanks: MT on Garr. OTs split adds, face to walls. Kill some adds first—each killed increases Garr dmg taken but also his dmg dealt.\nDPS: Kill 3-4 adds, then boss. After boss dies, kill rest adds. Avoid add deaths near you.\nHealers: Assign 1 per add tank. Cover Garr dmg scaling.\nClass Specific: Warlocks banish adds.\nBoss Ability: Fire Sworn Fortification stacks based on adds killed."
+		},
+		["Baron Geddon"] = {
+			["Default"] = "Tanks: MT position boss, keep ranged 40y out. FR gear recommended. Don’t outrange healers. Max range MDPS if tank gets bomb. Move out from AoE.\nDPS: Melee run out on Inferno. Ranged stack max range. Run out when you get Living Bomb away from group (towards wall). Living Bomb leaves ground AoE—use 5 preset explosion spots.\nHealers: Heal bomb targets + AoE. Watch ground AoEs.\nClass Specific: Priests/Paladins dispel Ignite Mana. Shield bomb targets.\nBoss Ability: Living Bomb + leaves ground AoE, Inferno around boss. Preselect 5 spots for bombs and alternate between."
+		},
+		["Shazzrah"] = {
+			["Default"] = "Tanks: MT boss away from ranged. OTs taunt after Blinks.\nDPS: Ranged max spread. Melee reposition fast after Blinks. Burn quickly.\nHealers: Cover tank + AoE bursts. Stay spread.\nClass Specific: Priests/Shamans dispel Deaden Magic on boss. Mages/Druids decurse(!).\nBoss Ability: Blink + Arcane Explosion, Deaden Magic, curse."
+		},
+		["Sulfuron Harbinger"] = {
+			["Default"] = "Tanks: MT on boss, 1-2 OTs on Adds and Sons. Stack all adds onto boss.\nDPS: Kill Sons first (prio) when spawned > then adds of Sulfuron > then boss. Interrupt Dark Mending.\nHealers: Assign 1 per tank. Cover add dmg.\nClass Specific: Rogues/Warriors kick heals.\nBoss Ability: Summons Sons. Dark Mending heals (interrupt)."
+		},
+		["Golemagg the Incinerator"] = {
+			["Default"] = "Tanks: MT on boss. 2-3 OTs on Core Hounds. Dogs will auto-switch to random target adding 10k threat—OT taunt quickly away from boss. Must kill all other MC bosses first.\nDPS: Full focus boss. Ignore dogs. Stay behind. Move out if to many stacks.\nHealers: Heavy tank heals and MDPS. Watch OTs.\nBoss Ability: Core Hounds swap threat. High fire dmg. Pre-req: clear all bosses."
+		},
+		["Majordomo Executus"] = {
+			["Default"] = "Tanks: MT on Domo, who will get teleported and needs to pickup and reposition boss. MT tank on far edge of circle with back against the raid. OTs split adds in 2 camps. 1-2 tank assigned dispeller for stun/TP debuff.\nDPS: Do not DPS boss. Kill healers first (un-sheeped), then elites. Stop DPS on reflect. Sheep as many healers as possible.\nHealers: Cover tanks. Heal and dispel stunned/TP victims in middle.\nClass Specific: Mages sheep healers. Hunters kite elites if assigned. Assign Paladin or Priest to dispel Hammer of Justice (stun).\nBoss Ability: Teleport & stun MT +  random group (3-5) with Hammer of Justice (dispellable). Magic reflect. Adds heal."
+		},
+		["Sorcerer-thane Thaurissan"] = {
+			["Default"] = "Tanks: MT back towards wall/pillar vs knockback. OT pick mirror at 50%. Both tanks - Center boss on ground marked Rune of Power. Move out of rune (spread) on Rune of Detonation, stay on rune on Rune of Combustion.\nDPS: Focus boss - ignore clone. Back facing wall (knockback). Spread for Detonation out of marking (dont stand on Rune of Power), while during Rune on Combustion move in (stand on Rune of Power).\nHealers: Follow MT and DPS. Move out on Detonation (spread) and move in on marking during Combustion. Care knockback and have back facing wall.\nClass Specific: Quick movement. All classes - not a DPS race. Move out & spread from Rune of Power (marking on ground) when Rune of Detonation. Else stay on and in.\nBoss Ability: Rune of Power on ground - Mark of Detonation (spread and move out), Mark of Combustion (stack and move in), if none (stay in). Mirror add at 50%, knockbacks."
+		},
+		["Ragnaros"] = {
+			["Default"] = "Tanks: 2 tanks. MT in front, OT ready. Swap after/if current tanks get Wrath of Ragnaros knockbacked. FR gear high. At 50% submerge, tanks grab adds in FR gear.\nDPS: Melee stack behind. Ranged spread ≥8y. Kill adds at 50% quickly, then boss. MDPS move out during Wrath of Ragnaros (avoid knockback).\nHealers: Spread ≥8y. Heal Wrath + Lava Burst dmg. Focus tanks.\nClass Specific: Ret/Survival Hunters/Enh Shamans form mana melee grp.\nBoss Ability: Wrath of Ragnaros knockback (move out MDPS, not MT), Lava Burst, submerge + adds at 50%."
+		}
     },
     ["Blackwing Lair"] = {
-        ["Razorgore"] = {
-            ["Default"] = "Tanks: Tanks stay to left and right side of orb-altar and pickup adds. Before Razorgore has destroyed all eggs, the MT takes over control of the orb and destroys the last egg (furthest). Position Razorgore during kill beneath and hugging the orb-altar.\nDPS: Melee DPS spread between left and right side of orb-altar. Range DPS stay on altar. Kill adds and protect orb controller. After add phase, ranged and melee rotate to safe LoS corner of the orb altar (jumping in and out to avoid fireball).\nHealers: Stay on altar during Phase 1; in Phase 2, use LoS corner to avoid Fireball Volley. Prioritize healing the orb-controller immediately after control breaks.\nBoss Ability: Razorgore is mind‑controlled to destroy eggs via the orb. Select one or two to operate Razorgore and killing the eggs. After control breaks, he casts a Fireball Volley that hits everyone in LoS—raid must hide behind corner of orb-altar.\nOptional: Raidleader can also choose to position Razorgore during P2 in the center of the room, abit towards the entrence and use the pilars to LoS."
+        ["Razorgore the Untamed"] = {
+            ["Default"] = "Tanks: Tanks stay to left and right side of orb-altar and pickup adds. Before Razorgore has destroyed all eggs, the MT takes over control of the orb and destroys the last egg (furthest). Position Razorgore during kill beneath and hugging the orb-altar.\nDPS: Melee DPS spread between left and right side of orb-altar. Range DPS stay on altar. Kill adds and protect orb controller. After add phase, ranged and melee rotate to safe LoS corner of the orb altar (jumping in and out to avoid fireball).\nHealers: Stay on altar during Phase 1; in Phase 2, use LoS corner to avoid Fireball Volley. Prioritize healing the orb-controller immediately after control breaks.\nBoss Ability: Razorgore is mind‑controlled to destroy eggs via the orb. Select one or two to operate Razorgore and killing the eggs. After control breaks, he casts a Fireball Volley that hits everyone in LoS—raid must hide behind corner of orb-altar.\nOptional: Raidleader can also choose to position Razorgore during P2 in the center of the room, abit towards the entrance and use the pilars to LoS."
         },
-        ["Vaelastrasz"] = {
+        ["Vaelastrasz the Corrupt"] = {
             ["Default"] = "Tanks: Only two tanks needed (max three). Main tank pulls facing one direction; off‑tank(s) stand of opposite side of DPS ready to pick up aggro immediately when main tank dies, as boss is taunt‑immune.\nDPS: Unlimited Mana/Rage/Energy from Essence of the Red. Stay focused on max DPS, but do NOT take agro (watch threat). If afflicted by Burning Adrenaline (deal damage), run to a corner to die safely without exploding near others.\nHealers: Mana is infinite—optimize healing output. Prioritize keeping tanks alive through the burn phase and use max ranked heals.\nBoss Ability: Vaelastrasz applies Essence of the Red (unlimited resources) and Burning Adrenaline periodically. When Burning Adrenaline expires, the affected player explodes—must run away to avoid wiping raid."
         },
-        ["Broodlord"] = {
+        ["Broodlord Lashlayer"] = {
             ["Default"] = "Tanks: Two tanks required. Pull Broodlord into a corner and hold there—tank's back should be against the wall to avoid his knockback ability. Second tank should be to the side against the other wall (not behind or infront) and be ready to taunt.\nDPS: Melee DPS should position themselves behind, but preferably abit towards the wall to mitigate the knockback. Two Rogues stay stealthed out of combat to disarm traps in the Suppression Room before the pull.\nHealers: Keep both tanks topped despite their healing reduction from Mortal Strike debuff. Keep ranged to avoid knockback."
         },
         ["Firemaw"] = {
@@ -2303,7 +2406,7 @@ Tactica.DefaultData = {
             ["Default"] = "Tanks: Use three to four tanks to soak Hateful Strike in full mitigation gear, the boss’s primary mechanic. The main tank should maintain threat; off-tanks need high health (~9k+ health) and armor to minimize damage. Tanks must be top 3-4 on threat.\nDPS: Avoid overtaking tanks on threat to reduce the chance of being hit by Hateful Strike. Melee and ranged need to maintain steady DPS while monitoring threat. Non-mana users can dip in the green acid for less health, to avoid accidential strikes.\nHealers: Assign dedicated healers to the tanks only—top them off continuously. Do not heal DPS at all or other healers to ensure tank survival through savage strikes.\nBoss Ability: Hateful Strike hits the highest-health melee player (other than the tank), dealing significant damage. At ~5% health, Patchwerk Enrages, gaining 40% attack speed and increased damage output."
         },
         ["Grobbulus"] = {
-            ["Default"] = "Tanks: Keep Grobbulus facing away from the raid—only the tank should ever be in front to avoid Slime Spray add spawns. Slowly kite the boss around the outer grate of the room, moving after each Poison Cloud is dropped (every ~15s). Pop cooldowns at 30%.\nDPS: Kill Slime adds quickly; cleave them down when they spawn in melee. Stay behind the boss at all times. Avoid being in front to prevent add spawns from Slime Spray.\nHealers: Prepare for burst healing when players receive Mutating Injection—they will run to the side away before being dispelled (do not dispell before). Expect doubled frequency after 30%.\nClass Specific: Dedicate 1x Priest/Paladin to dispel Mutating Injection only after the infected player has moved away out of the raid.\nBoss Ability: Poison Cloud- dropped at boss location every 15s, expands over time, persists indefinitely. Slime Spray - Frontal cone, spawns 1 Slime per player hit. Mutating Injection - Disease explodes after 10s, deals AoE damage—run out of raid."
+            ["Default"] = "Tanks: Keep Grobbulus facing away from the raid—only the tank should ever be in front to avoid Slime Spray add spawns. Slowly kite the boss around the outer grate of the room, moving after each Poison Cloud is dropped (every ~15s). Pop cooldowns at 30%.\nDPS: Kill Slime adds quickly; cleave them down when they spawn in melee. Stay behind the boss at all times. Avoid being in front to prevent add spawns from Slime Spray.\nHealers: Prepare for burst healing when players receive Mutating Injection—they will run to the side away before being dispelled (do not dispel before). Expect doubled frequency after 30%.\nClass Specific: Dedicate 1x Priest/Paladin to dispel Mutating Injection only after the infected player has moved away out of the raid.\nBoss Ability: Poison Cloud- dropped at boss location every 15s, expands over time, persists indefinitely. Slime Spray - Frontal cone, spawns 1 Slime per player hit. Mutating Injection - Disease explodes after 10s, deals AoE damage—run out of raid."
         },
         ["Gluth"] = {
             ["Default"] = "Tanks: Use 1-2 tanks and potentially rotate at 3–4 Mortal Wound stacks (can be done solo). Position boss near door to increase distance from zombies. Another tank can spam Blessing of Kings or shout/howl to get aggro of Zombies and kite them.\nDPS: Focus boss. Assign a kite team for zombies using Frost Trap, Nova, and slows. Do not let zombies reach Gluth post-Decimate or he will heal massively.\nHealers: Maintain tank healing through Mortal Wound debuff. After Decimate, be ready for quick AoE and tank burst heals. HoTs pre-Decimate help survivability.\nClass Specific: Hunters, Paladin, Warrior or/and Mages kite zombies with Frost Trap, Nova, Blessing of Kings, Howl and slows. Priests and Druids pre-cast HoTs before Decimate. Use Fear Ward to avoid zombie fears if applicable.\nBoss Ability: Mortal Wound stacks reduce tank healing. Decimate drops all units to 5% HP. Enrage is removed with Tranquilizing Shot."
@@ -2338,7 +2441,7 @@ Tactica.DefaultData = {
             ["Default"] = "Tanks: Use 2 tanks to rotate for Noxious Breath. Face boss away from raid to avoid breath and tail. Swap before stacks get too high. Position sideways with raid spread loosely around to avoid chain lightning.\nDPS: Spread out to avoid Lightning Wave chaining. At 75/50/25% HP, AoE down Demented Druid Spirits quickly before they spread. Avoid green sleep clouds. Melee stay to boss sides, not front or back.\nHealers: Stay spread to avoid Lightning Wave. Watch for spike damage during add phases. Avoid green sleep clouds. Heal tank swaps early to keep up with threat. Be ready for bursts after breath stacks.\nClass Specific: Classes with AoE should prep for 75/50/25% add waves. Mages, Warlocks, Hunters ideal for Spirit cleanup. Everyone must avoid sleep clouds and keep spread to minimize Lightning Wave bounces.\nBoss Ability: At 75/50/25%, Ysondre spawns one Demented Spirit per player. Lightning Wave chains up to 10 players if too close. Noxious Breath reduces threat and increases ability cooldowns, requires tank swap."
         },
         ["Nerubian Overseer"] = {
-        ["Default"] = "Tanks: MT tanks boss away from water to avoid reset. Periodically move out of poison cloud. Keep boss pathing in quarter-circle toward Tirion. DPS warriors can off-tank spawned adds.\nDPS: Melee stack behind boss, ranged at min range and stay still. Kill adds from web-sprayed players if they spawn. Use frost mages/paladins for web spray immune rotation.\nHealers: Heal through poison nova damage and add spikes. Stand in range group. Cleanse poison quickly with spells, Cleansing Totem, or poison removal items.\nClass Specific: Frost mages rotate Ice Block to immune web spray (2 uses each). Paladins use Divine Shield after mage rotation ends. Warriors can pick up spawned adds. Shamans drop Cleansing Totem.\nBoss Ability: Drops poison clouds (move boss), poison nova, web sprays farthest player every 24s (spawns 4 weak adds), water proximity resets fight."
+			["Default"] = "Tanks: MT tanks boss away from water to avoid reset. Periodically move out of poison cloud. Keep boss pathing in quarter-circle toward Tirion. DPS warriors can off-tank spawned adds.\nDPS: Melee stack behind boss, ranged at min range and stay still. Kill adds from web-sprayed players if they spawn. Use frost mages/paladins for web spray immune rotation.\nHealers: Heal through poison nova damage and add spikes. Stand in range group. Cleanse poison quickly with spells, Cleansing Totem, or poison removal items.\nClass Specific: Frost mages rotate Ice Block to immune web spray (2 uses each). Paladins use Divine Shield after mage rotation ends. Warriors can pick up spawned adds. Shamans drop Cleansing Totem.\nBoss Ability: Drops poison clouds (move boss), poison nova, web sprays farthest player every 24s (spawns 4 weak adds), water proximity resets fight."
 		},
 		["Dark Reaver of Karazhan"] = {
 			["Default"] = "Tanks: MT keeps boss in place. Position so regular adds can be cleaved/AoE'd. Stay aware of class-specific adds spawning on random players—help control them until the correct class can kill.\nDPS: Bring 1+ DPS of each class to handle class-specific adds. Focus your own class add ASAP. Regular adds die to cleave/AoE near boss. Hunters split into 2+ groups to avoid deadzone.\nHealers: Heal through add damage spikes, especially on players targeted by class-specific adds. Stay mobile to avoid getting locked down by adds while keeping tank and raid stable.\nClass Specific: Only your class can damage its class-specific add. All classes may apply CC/debuffs to them. Hunters split to avoid deadzone.\nBoss Ability: Spawns regular adds (AoE down) and class-specific adds (only that class can damage). Class adds spawn on random players. More players = easier fight."
@@ -2358,14 +2461,13 @@ Tactica.DefaultData = {
     },
     ["Emerald Sanctum"] = {
         ["Erennius"] = {
-            ["Default"] = "Tanks: 2 tank. Position far from ranged/healers. Face away from raid to avoid frontal breath. Second tank keep high on threat, if first gets slept.\nDPS: Stay at range from boss. Avoid standing in front.\nHealers: Stay far; watch for AOE silence and sleep DoT (~500/tick). Heal tank through silence downtime.\nClass Specific: Poison Volley must be cleansed/cured (Paladins, Druids, Shamans).\nBoss Ability: AoE silence, sleep with DoT, Poison Volley (cure), frontal breath."
+            ["Default: Normal"] = "Tanks: 2 tank. Position far from ranged/healers. Face away from raid to avoid frontal breath. Second tank keep high on threat, if first gets slept.\nDPS: Stay at range from boss. Avoid standing in front.\nHealers: Stay far; watch for AOE silence and sleep DoT (~500/tick). Heal tank through silence downtime.\nClass Specific: Poison Volley must be cleansed/cured (Paladins, Druids, Shamans).\nBoss Ability: AoE silence, sleep with DoT, Poison Volley (cure), frontal breath.",
+			["Default: Hard Mode"] = "Tanks: 3 tanks. 1 tanks Erennius out of LoS. 2 tanks on Solnius; both taunt at 91%—he is untauntable below 90%. Face Solnius so DPS hits from side. During add phase, Solnius tanks pick up all adds—priority on large ones.\nDPS: Focus Solnius only. Below 90%, manage threat carefully as he's untauntable. During add phase, kill large adds first. Small whelps keep spawning until all large ones are dead—cleave them down after. Hit from side (not behind, as its a dragon).\nHealers: Assign 3-4 to Erennius tank and to heal each other during sleep. Rest heal Solnius tanks and DPS. No one should decurse, dispel, cleanse or cure—this is crucial to avoid fight-wiping effects.\nClass Specific: Absolutely no decursing, dispelling, cleansing, or curing. This is critical—doing so will trigger mechanics that can wipe the raid.\nBoss Ability: At 50%, Solnius sleeps and adds spawn. Kill adds in order of size—large first, then small. Small whelps will keep spawning until all large adds are dead. Positioning of Erennius is important, use tree/range (think Chomaggus from BWL)."
         },
-        ["Solnius"] = {
-            ["Default"] = "Tanks: 2 tanks on Solnius, taunt at 91% as he is untauntable after 90%. Face so DPS can hit from the side. During add phase, tanks pick up all adds (prio large).\nDPS: Watch threat below 90% as boss is untauntable. In add phase, kill large adds before whelps (whelps keep spawning until large are dead).\nHealers: Care for spike damage during add phase or from debuffs. No decurse, dispel, or cleanse (!).\nClass Specific: No decursing, dispelling, or cleansing at any time. Very important!\nBoss Ability: Does debuffs of all types (do not dispell, decurse or cleanse). At 50% Solnius sleeps; adds spawn—kill large adds first, then whelps. Untauntable after 90%."
+        ["Solnius the Awakener"] = {
+            ["Default: Normal"] = "Tanks: 2 tanks on Solnius, taunt at 91% as he is untauntable after 90%. Face so DPS can hit from the side. During add phase, tanks pick up all adds (prio large).\nDPS: Watch threat below 90% as boss is untauntable. In add phase, kill large adds before whelps (whelps keep spawning until large are dead).\nHealers: Care for spike damage during add phase or from debuffs. No decurse, dispel, or cleanse (!).\nClass Specific: No decursing, dispelling, or cleansing at any time. Very important!\nBoss Ability: Does debuffs of all types (do not dispell, decurse or cleanse). At 50% Solnius sleeps; adds spawn—kill large adds first, then whelps. Untauntable after 90%.",
+			["Default: Hard Mode"] = "Tanks: 3 tanks. 1 tanks Erennius out of LoS. 2 tanks on Solnius; both taunt at 91%—he is untauntable below 90%. Face Solnius so DPS hits from side. During add phase, Solnius tanks pick up all adds—priority on large ones.\nDPS: Focus Solnius only. Below 90%, manage threat carefully as he's untauntable. During add phase, kill large adds first. Small whelps keep spawning until all large ones are dead—cleave them down after. Hit from side (not behind, as its a dragon).\nHealers: Assign 3-4 to Erennius tank and to heal each other during sleep. Rest heal Solnius tanks and DPS. No one should decurse, dispel, cleanse or cure—this is crucial to avoid fight-wiping effects.\nClass Specific: Absolutely no decursing, dispelling, cleansing, or curing. This is critical—doing so will trigger mechanics that can wipe the raid.\nBoss Ability: At 50%, Solnius sleeps and adds spawn. Kill adds in order of size—large first, then small. Small whelps will keep spawning until all large adds are dead. Positioning of Erennius is important, use tree/range (think Chomaggus from BWL)."
         },
-        ["Hard Mode"] = {
-            ["Default"] = "Tanks: 3 tanks. 1 tanks Erennius out of LoS. 2 tanks on Solnius; both taunt at 91%—he is untauntable below 90%. Face Solnius so DPS hits from side. During add phase, Solnius tanks pick up all adds—priority on large ones.\nDPS: Focus Solnius only. Below 90%, manage threat carefully as he's untauntable. During add phase, kill large adds first. Small whelps keep spawning until all large ones are dead—cleave them down after. Hit from side (not behind, as its a dragon).\nHealers: Assign 3-4 to Erennius tank and to heal each other during sleep. Rest heal Solnius tanks and DPS. No one should decurse, dispel, cleanse or cure—this is crucial to avoid fight-wiping effects.\nClass Specific: Absolutely no decursing, dispelling, cleansing, or curing. This is critical—doing so will trigger mechanics that can wipe the raid.\nBoss Ability: At 50%, Solnius sleeps and adds spawn. Kill adds in order of size—large first, then small. Small whelps will keep spawning until all large adds are dead. Positioning of Erennius is important, use tree/range (think Chomaggus from BWL)."
-        }
     },
     ["Lower Karazhan Halls"] = {
         ["Master Blacksmith Rolfen"] = {
@@ -2375,7 +2477,7 @@ Tactica.DefaultData = {
             ["Default"] = "Tanks: 1 tank. Face away.\nDPS: Focus and kill eggs as they spawn, stay max range.\nHealers: Keep poison cleansed/cured quickly.\nClass Specific: Druids, Paladins, Shamans cleanse/cure poison.\nBoss Ability: Frequent poison application."
         },
         ["Grizikil"] = {
-            ["Default"] = "Tanks: 1 tank, move out of Rain of Fire or Blast Wave AoE.\nDPS: Focus boss, avoid ground/boss AoE.\nHealers: Avoid Rain of Fire, AoE, spread to cover all. Care for damage surge from abilties.\nClass Specific: Rogues / Warriors can interupt the blast wave AoE.\nBoss Ability: Rain of Fire, blast wave AoE (interuptable)."
+            ["Default"] = "Tanks: 1 tank, move out of Rain of Fire or Blast Wave AoE.\nDPS: Focus boss, avoid ground/boss AoE.\nHealers: Avoid Rain of Fire, AoE, spread to cover all. Care for damage surge from abilties.\nClass Specific: Rogues / Warriors can interrupt the blast wave AoE.\nBoss Ability: Rain of Fire, blast wave AoE (interruptable)."
         },
         ["Clawlord Howlfang"] = {
             ["Default"] = "Tanks: 2 tanks. MT engages and tanks Howlfang where he stands. OT hides behind corner until MT gets 15 stacks, then run in and taunts. Swap back and forth until stacks drop.\nDPS: Threat control. Melee can stay in; avoid getting hit. Ranged stay max range.\nHealers: Max range. Watch for heavy tank damage during swaps or enrage.\nClass Specific: Mages/Druids decurse tanks instantly.\nBoss Ability: Armor -5% & damage -5% reduction stack, 75% heal reduction curse, periodic enrage."
@@ -2389,22 +2491,22 @@ Tactica.DefaultData = {
     },
     ["Upper Karazhan Halls"] = {
 		["Keeper Gnarlmoon"] = {
-        ["Default"] = "Tanks: Max 3 tanks. MT on boss and keep in position facing away. 1 Raven add tank right side (blue). If MT avoids Lunar Shift, no OT (left side) needed.\nDPS: Split DPS evenly. Casters/AoE classes to right (blue debuff), melee to left (red debuff). Nuke boss until 4 owls (all) or Ravens (blue right side) spawn. Bring all owls to ~10% and kill all owls at once. Move out of Lunar Shift AoE—only MT stays in.\nHealers: Evenly split between left and right. Be ready to heal through Lunar Shift and owl spawn damage. Focus on MT healing during shift and when threat resets. Watch for side-switching during debuff swap.\nClass Specific: Casters/range right side (Blue), melee left side (Red). Healers split evenly - needs to be equally many on both. During Lunar Shift, your debuff may switch—adjust sides immediately or risk being silenced or damaged heavily.\nBoss Ability: Lunar Shift deals AoE and may switch debuff color—move out unless you're MT. Owls must die simultaneously. Ravens spawn during fight—aggro reset also occurs, requiring OT to pick up boss fast and reposition."
+			["Default"] = "Tanks: Max 3 tanks. MT on boss and keep in position facing away. 1 Raven add tank right side (blue). If MT avoids Lunar Shift, no OT (left side) needed.\nDPS: Split DPS evenly. Casters/AoE classes to right (blue debuff), melee to left (red debuff). Nuke boss until 4 owls (all) or Ravens (blue right side) spawn. Bring all owls to ~10% and kill all owls at once. Move out of Lunar Shift AoE—only MT stays in.\nHealers: Evenly split between left and right. Be ready to heal through Lunar Shift and owl spawn damage. Focus on MT healing during shift and when threat resets. Watch for side-switching during debuff swap.\nClass Specific: Casters/range right side (Blue), melee left side (Red). Healers split evenly - needs to be equally many on both. During Lunar Shift, your debuff may switch—adjust sides immediately or risk being silenced or damaged heavily.\nBoss Ability: Lunar Shift deals AoE and may switch debuff color—move out unless you're MT. Owls must die simultaneously. Ravens spawn during fight—aggro reset also occurs, requiring OT to pick up boss fast and reposition."
 		},
 		["Lay-Watcher Incantagos"] = {
 			["Default"] = "Tanks: Use 2–5 tanks. MT keeps boss near entrance, facing away. Reposition if AoE drops on MT. Other tanks pick up adds as they spawn. At start 1 tank/per or one by one using Rogue/Hunter kite-vanish/FD tactic from opposite side of the room).\nDPS: Priority: kill Incantagos Affinity (class-specific), then adds, then boss. Avoid Blizzard and AoEs. Stay max range and spread to minimize group damage. Melee must move fast—AoEs tick for 2.5k+ and is likely to be placed due to stacking.\nHealers: Watch for burst during AoEs—especially in melee. Prioritize MT and OT heals otherwise. Be ready for raid-wide spot healing if mechanics overlap.\nClass Specific: Kill Incantagos Affinity immediately when your spell school matches (e.g., Fire, Nature, Physical, etc.). It only takes damage from one school at a time. This is the fight's most critical mechanic.\nBoss Ability: Incantagos spawns damaging AoEs—Missles and Blizzard—often targeting melee. Adds will spawn frequently. Affinity adds must be killed fast, first and only take damage from one specific school per spawn."
 		},
 		["Anomalus"] = {
-			["Default"] = "Tanks: Use 3–4 tanks. Current tank keeps boss near books corner opposite entrance, facing away. Reposition if pool drops on tank. Swap at ~10–12 stacks (Arcane Resistance [AR] leather) or ~20–25 (AR plate). The tank who swaps out always gets the bomb.\nDPS: Melee behind boss, ranged further back forming it's own stacked group. Do not overtake threat—2nd threat always gets bomb. Move from pools and manage positioning carefully to avoid sudden aggro shifts.\nHealers: Stand on stairs opposite entrance—central to all roles. Watch for increasing tank damage as stacks rise. Instantly heal and dispell Arcane Prison, cast randomly.\nClass Specific: 2nd on threat, gets bomb (including prior tanks after switch). DPS normally until 7s left on debuff, then run to a corner (entrance side) to explode. Use resulting debuff to soak pools. A Paladin soaks first pool. DIspell Arcane Prison.\nBoss Ability: All players must have 200+ Arcane Resistance (else wipe). Bomb targets 2nd threat (includes swapped tanks). Pools spawn on randomly—must be soaked by someone with debuff from explotion, else wiping raid."
+			["Default"] = "Tanks: Use 3–4 tanks. Current tank keeps boss near books corner opposite entrance, facing away. Reposition if pool drops on tank. Swap at ~10–12 stacks (Arcane Resistance [AR] leather) or ~20–25 (AR plate). The tank who swaps out always gets the bomb.\nDPS: Melee behind boss, ranged further back forming it's own stacked group. Do not overtake threat—2nd threat always gets bomb. Move from pools and manage positioning carefully to avoid sudden aggro shifts.\nHealers: Stand on stairs opposite entrance—central to all roles. Watch for increasing tank damage as stacks rise. Instantly heal and dispel Arcane Prison, cast randomly.\nClass Specific: 2nd on threat, gets bomb (including prior tanks after switch). DPS normally until 7s left on debuff, then run to a corner (entrance side) to explode. Use resulting debuff to soak pools. A Paladin soaks first pool. DIspell Arcane Prison.\nBoss Ability: All players must have 200+ Arcane Resistance (else wipe). Bomb targets 2nd threat (includes swapped tanks). Pools spawn on randomly—must be soaked by someone with debuff from explotion, else wiping raid."
 		},
 		["Echo of Medivh"] = {
-			["Default"] = "Tanks: MT tanks boss facing away. 3 tanks pick up Infernal at every ~25%, move left, don't stack. Infernal reset threat, charge players—taunt back. Full Fire Resistance gear required for add tanking. If you get a Corruption of Medivh debuff, move away.\nDPS: Only DPS Medivh and Lingering Doom adds. Ignore Infernals. Assigned interrupts only—Shadebolt must be kicked. Overkicking/interuption causes instant casts. Move right if debuffed by Corruption of Medivh. Dodge Flamestrike. Range Spread behind boss.\nHealers: Assign 1 Priest + 1 Paladin to MT. Dispel Arcane Focus ASAP—causes +200% magic dmg. Shadebolt and Flamestrike deal heavy magic burst. Heal through Corruption of Medivh—never dispel it.\nClass Specific: Assign interrupters—Shadebolt is priority. Rogue/Warlock CoT/mind-numbing to increase cast. Priests/Paladins dispel MT's Arcane Focus. Move right if debuffed with Corruption of Medivh and use Restorative Pot at 4 stacks of Doom of Medivh!\nBoss Ability: Shadebolt = lethal, must be kicked. Overkicking = instant casts. Flamestrike targets group—move. Frost Nova roots melee. Corruption of Medivh is fatal if dispelled— Restorative Pot at 4 stacks Doom of Medivh."
+			["Default"] = "Tanks: MT tanks boss facing away. 3 tanks pick up Infernal at every ~25%, move left, don't stack. Infernal reset threat, charge players—taunt back. Full Fire Resistance gear required for add tanking. If you get a Corruption of Medivh debuff, move away.\nDPS: Only DPS Medivh and Lingering Doom adds. Ignore Infernals. Assigned interrupts only—Shadebolt must be kicked. Overkicking/interruption causes instant casts. Move right if debuffed by Corruption of Medivh. Dodge Flamestrike. Range Spread behind boss.\nHealers: Assign 1 Priest + 1 Paladin to MT. Dispel Arcane Focus ASAP—causes +200% magic dmg. Shadebolt and Flamestrike deal heavy magic burst. Heal through Corruption of Medivh—never dispel it.\nClass Specific: Assign interrupters—Shadebolt is priority. Rogue/Warlock CoT/mind-numbing to increase cast. Priests/Paladins dispel MT's Arcane Focus. Move right if debuffed with Corruption of Medivh and use Restorative Pot at 4 stacks of Doom of Medivh!\nBoss Ability: Shadebolt = lethal, must be kicked. Overkicking = instant casts. Flamestrike targets group—move. Frost Nova roots melee. Corruption of Medivh is fatal if dispelled— Restorative Pot at 4 stacks Doom of Medivh."
 		},
 		["King (Chess)"] = {
 			["Default"] = "Tanks: 4-5 tanks. 1 tank picks up Rook (far left), 1 on Bishop (far right), 1 on Knight (close right), and 1-2 tanks also pick up Broken Rook, Decaying Bishop, Mechanical Knight and Pawns. Drag pawns to bosses for cleave. Swap Knight/Bishop tank at end.\nDPS: Kill order: Rook → Bishop → Knight → King. Swap to Pawns as they spawn and cleave them on bosses. LOS King's Holy Nova behind pillars after each boss dies or you will wipe. /bow on Queen's Dark Subservience if you get debuff. Avoid void zones.\nHealers: LOS King's Holy Nova behind pillars when any boss dies. Dispel silence from Bishop. Watch tank on Knight for armor debuff spikes. Prepare for AoE damage from Queen and Bishop. Keep range if not needed in melee.\nClass Specific: Mages/Druids decurse King's curse. All players must /bow in melee on Queen's Subservience or die. Stand behind Knight. LOS Holy Nova (King) when a boss dies. Interrupt/silence as needed. Dispel Bishop silence.\nBoss Ability: King- Holy Nova on each death, void zones, deadly curse. Queen- AoE Shadowbolts, Dark Subservience. Bishop- ST/cleave shadowbolt, silence. Knight- Frontal cleave, armor debuff. Pawns- constant spawn, cleave on boss."
 		},
 		["Sanv Tas'dal"] = {
-			["Default"] = "Tanks: 3–4 tanks. MT holds boss at top of stairs facing away from raid. OT tanks adds from left/right portals when spawned, optional tank for mid portal at melee. During add phase boss untanked; all tanks help kill/tank adds during this phase, prio large.\nDPS: No dispelling to see shades. If you see shades, kill them. All range stand lower level center and DPS prio adds from portals as they spawn, big first. Melee behind boss, but during add phase all on adds at lower center. Move when boss does AoE melee.\nHealers: Stand center lower ground (with range DPS). Heal MT at stairs and OTs at portals. Watch for heavy AoE melee dmg or from add. Do not dispell magic debuff called phase shifted (it reveals shades).\nClass Specific: 2 Hunters rotate Tranq Shot on boss when needed. No one dispell Phase Shifted to keep shades visible. Melee can cleave mid-portal adds at boss.\nBoss Ability: AoE melee dmg—melee move out. Spawns shades only visible with debuff. Add waves from 3 portals, large adds most dangerous. During add phase boss inactive."
+			["Default"] = "Tanks: 3–4 tanks. MT holds boss at top of stairs facing away from raid. OT tanks adds from left/right portals when spawned, optional tank for mid portal at melee. During add phase boss untanked; all tanks help kill/tank adds during this phase, prio large.\nDPS: No dispelling to see shades. If you see shades, kill them. All range stand lower level center and DPS prio adds from portals as they spawn, big first. Melee behind boss, but during add phase all on adds at lower center. Move when boss does AoE melee.\nHealers: Stand center lower ground (with range DPS). Heal MT at stairs and OTs at portals. Watch for heavy AoE melee dmg or from add. Do not dispel magic debuff called phase shifted (it reveals shades).\nClass Specific: 2 Hunters rotate Tranq Shot on boss when needed. No one dispel Phase Shifted to keep shades visible. Melee can cleave mid-portal adds at boss.\nBoss Ability: AoE melee dmg—melee move out. Spawns shades only visible with debuff. Add waves from 3 portals, large adds most dangerous. During add phase boss inactive."
 		},
 		["Kruul"] = {
 			["Default"] = "Tanks: 4–6 tanks. 1-2 front(facing boss at start), 1-2 back(behind boss at start), 1 infernal tank(full FR), 1 add helper if needed. Taunt swap between front/back at 6 stacks (no more). Infernal tank left, DPS right. Boss ignore armor; so stack HP/threat.\nDPS: Ranged on boss only. Melee in front/back groups to soak cleave (~8+tanks in each group). Melee have good health. At 30% after knockback all melee chain LIP shouts/taunts, then die; ranged continues. Ignore infernals. Run out of raid if decurse.\nHealers: Heal tanks/front/back groups. At 30% phase, let melee die after LIP taunt, focus ranged + tanks. 3 assigned decurser that removes decruse only after target moves from raid (left, right, middle).\nClass Specific: Assign 3 decurser for Kruul's curse. Melee tanks use LIP in 30% phase after knockback. Infernal tank uses full FR. Fury prot viable—boss ignores armor.\nBoss Ability: Cleave on front/back groups, stacking debuff (swap at 6). Summons infernals. At 30% gains 4× dmg. Casts decursable curse—must be decursed outside raid (assign 3 decursers - have player move out when getting decursed)."
@@ -2413,7 +2515,7 @@ Tactica.DefaultData = {
 			["Default"] = "Tanks: 5 heavy + 2–3 OT. During P1-2 tanks on boss, 1 per add in corners. Always have a tank 2nd boss threat and 15y away to soak (run in and taunt swap to ensure). During P2-2 tanks per fragment (1+2 threat). 1-2 on Tanks Exiles.\nDPS: During P1 kill adds first. Avoid add death explosions (think Garr adds). Dont overtake 1-2 tank threat. During P2 nuke heart/crystal before full mana+small adds, then fragments to same % - kill at same time. Move away from Flamestrike when announced.\nHealers: Stack center P1-P2 with Range. Watch tank burst + add explosions + Ouro tail damage + Flamestrike. Dispel tank debuffs instantly in P2. Keep OT/soak tanks alive. Heal during kiting trails.\nClass Specific: Moonkin/Warlock to initally get 2nd of threat, away from raid and soak before first adds are dead. Threat control—keep assigned tanks 1+2 on boss/frags. Dispel tanks fast. Avoid trail on ground. Hunters - Vipersting crystal.\nBoss Ability: Adds explode on death, soak mechanic for 2nd threat tank, trail to kite, crystal/heart to mana drain, fragments require dual-threat tanks, Exile spawns. Also Flamestrikes zone to move out from (move during cast to avoid all damage)."
 		},
 		["Mephistroth"] = {
-			["Default"] = "Tanks: 2-3 tanks. MT on boss & doomguard when boss teleports. OT on other doomguard + adds. 3rd or just DPS Paladin helps pick Imps. Drag Nightmare Crawlers & Doomguards away from ranged/healers as they soak mana/AOE. MT usually stationary-face boss away.\nDPS: Prio shards > adds > boss. Kill nightmare crawlers fast, drag from ranged. During shard phase, assigned 4–5 kill each Hellfury Shard in time limit. They spawn in the outter circle, with equal distance. Think of it like a clock.\nHealers: Stack with ranged. Heal shard teams. Watch for fear + burst on tank swap. Assign 2-3 dispellers, to cover shard groups on far side during this ability. Dispell immediately.\nClass Specific: No movement during Shackles—any movement wipes raid. Assigned groups kill Hellfury Shards fast. Drag nightmare crawlers out. Assign a few dispellers to also spread out during shards.\nBoss Ability: Shackles—no one moves or wipe. Hellfury Shards—kill fast. Spawns nightmare crawlers (mana drain) + doomguards. Fears raid. Dispell prio - not dispelling will cause a kills from center."
+			["Default"] = "Tanks: 2-3 tanks. MT on boss & doomguard when boss teleports. OT on other doomguard + adds. 3rd or just DPS Paladin helps pick Imps. Drag Nightmare Crawlers & Doomguards away from ranged/healers as they soak mana/AOE. MT usually stationary-face boss away.\nDPS: Prio shards > adds > boss. Kill nightmare crawlers fast, drag from ranged. During shard phase, assigned 4–5 kill each Hellfury Shard in time limit. They spawn in the outter circle, with equal distance. Think of it like a clock.\nHealers: Stack with ranged. Heal shard teams. Watch for fear + burst on tank swap. Assign 2-3 dispellers, to cover shard groups on far side during this ability. Dispel immediately.\nClass Specific: No movement during Shackles—any movement wipes raid. Assigned groups kill Hellfury Shards fast. Drag nightmare crawlers out. Assign a few dispellers to also spread out during shards.\nBoss Ability: Shackles—no one moves or wipe. Hellfury Shards—kill fast. Spawns nightmare crawlers (mana drain) + doomguards. Fears raid. Dispel prio - not dispelling will cause a kills from center."
 		}
 	},
     ["Onyxia's Lair"] = {

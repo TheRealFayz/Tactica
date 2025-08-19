@@ -1,6 +1,6 @@
 ## Interface: 11200
 ## Title: Tactica
-## Version: 1.9.3
+## Version: 1.9.4
 ## Notes: Post tactics, assign loot rules & raid-roles, synced!
 ## Author: Doite
 ## SavedVariables: TacticaDB
