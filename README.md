@@ -1,12 +1,12 @@
 # Tactica
-## Post tactics, assign loot rules & raid-roles, synced!
-Tactical addon for raid leading with ease — post ~90 clear boss strategies (or add your own), assign & sync roles in raid roster, and smooth out loot mode changes, all in one place.
+## Post tactics, build raids, set loot rules & assign roles, synced!
+Tactical addon for raid leading with ease — post ~90 clear boss strategies (or add your own), build raids (LFM creator/poster), assign & sync roles in raid roster, and smooth out loot mode changes, all in one place.
 
 ## What it does (TL;DR)
 ### 1. Announce tactics fast
 - Post default or custom strategies to self or raid with one click or /tt commands. Auto-popup on boss (toggleable).
 - `/tt` or `/tt post` for settings and frame.
-- `/tt auto` to manually toggle the popup _(note: this is also available via /tt options)_.
+- `/tt auto` toggles the auto-popup on boss (same as the checkbox in **/tt options**).
 - `/tt list` for all raid tactics available (default and custom).
 - `/tt add` to add your custom tactics ("enter" for line breaks will divide tactic into separate /raid msg's).
 - `/tt remove` to remove your custom tactics.
@@ -17,21 +17,30 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 ### 2. Organize your comp at a glance
 - Right-click raid roster to Toggle as Healer / DPS / Tank. Roles sync to everyone running Tactica; latest leader/assist decision wins.
 - Clean indicators next to names (H/D/T).
-- pfUI communication: Tactica tank role also flags tank role in pfUI when available (requires SuperWoW).
+- pfUI (optional): Tactica’s Tank role also flags pfUI’s tank role when pfUI is present (requires SuperWoW).
 - `/tt roles` to post the assigned and number of tanks, healers and DPS, respectively, to the raid.
-- `/tt rolewhisper` toggle the role whisper function on/off _(note: this is also available via /tt options)_.
+- `/tt rolewhisper` toggle the role whisper function on/off (same as the checkbox in **/tt options**).
 <img width="492" height="327" alt="Tactica - Roster" src="https://github.com/user-attachments/assets/991708d0-b30d-402f-9eff-57cb767b9859" />
 
-### 3. Loot mode QoL for bosses
-- Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). _(Note: this is available via /tt options)_.
+### 3. Build Raids (LFM poster/creator)
+- Select raid, size and setup and Tactica will do the rest. Creating a seamless LFM message, to post in your channels.
+- Choose number of SR (Soft Reserves), HR (Hard Reserves), Tanks, Healers, and whether you can Summon.
+- Select Yell, LFG or/and World to post in - set optional "Auto-announce".
+- Syncs with raid roster, so when you assign a role - the LFM announcement will adjust accordingly.
+- `/tt build` for the LFM/raid builder UI.
+- `/tt lfm` posts once using your current Builder settings and respects a 30s cooldown (shared with the “Announce” button).
+<img width="584" height="479" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/3c604380-aec9-4a5e-994d-2651e1faca90" />
+
+### 4. Loot mode QoL for bosses
+- Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). (same as the checkbox in **/tt options**).
 - Works even when ML ≠ RL: the ML’s client pings the RL via addon message when the corpse is emptied.
 - “Don’t ask again this raid” (raid-scoped) and global on/off setting.
 <img width="287" height="161" alt="Tactica-loot" src="https://github.com/user-attachments/assets/f8fcd04a-8060-4fa1-bb13-7d76810d9800" />
 
 ## Quick start
 - `/tt` or `/tactica` — open the Post UI
-- `/tt options` or `/tactica options` — open the option UI
-- `/tt help` or `/tactica help` — full command list
+- `/tt options` — open the Options UI
+- `/tt help` — full command list
 - Toggle auto behaviors in the option UI (checkboxes), or use the slash commands mentioned in help.
 <img width="288" height="174" alt="image" src="https://github.com/user-attachments/assets/d5d322dd-9e92-447d-892c-b896e787ce1d" />
 
