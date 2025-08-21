@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: Tactica
-## Version: 1.9.4
-## Notes: Post tactics, assign loot rules & raid-roles, synced!
+## Version: 2.0.0
+## Notes: Post tactics, build raids, set loot rules & assign roles, synced!
 ## Author: Doite
 ## SavedVariables: TacticaDB
 
@@ -9,3 +9,4 @@ Tactica.lua
 
 Modules\TacticaRaidRoles.lua
 Modules\TacticaLoot.lua
+Modules\TacticaRaidBuilder.lua

@@ -298,9 +298,8 @@ Tactica:RegisterBossAliases("Naxxramas", "The Four Horsemen", {
 }, "hostile")
 
 -- Kara40: Any key piece should count → King (Chess) (they’re hostile; “any” is also fine)
-Tactica:RegisterBossAliases("Lower Karazhan Halls", "King (Chess)", {
-  "King","Rook","Bishop","Knight","Decaying Bishop","Malfunctioning Knight",
-  "Broken Rook","Withering Pawn",
+Tactica:RegisterBossAliases("Upper Karazhan Halls", "King (Chess)", {
+  "King","Rook","Bishop","Knight","Decaying Bishop","Malfunctioning Knight","Broken Rook","Withering Pawn",
 }, "hostile")
 
 -- ES: Solnius before spoken to → Solnius hostile (later the dragon Solnius the Awakener)
@@ -645,7 +644,6 @@ function Tactica:CommandHandler(msg)
 	elseif command == "help" then
 		self:PrintHelp()
 
-
     elseif command == "list" then
         self:ListAvailableTactics()
 
@@ -658,6 +656,17 @@ function Tactica:CommandHandler(msg)
     elseif command == "post" then
         -- open the post UI
         self:ShowPostPopup(true)
+
+	elseif command == "build" then
+	  if TacticaRaidBuilder and TacticaRaidBuilder.Open then
+		TacticaRaidBuilder.Open()
+	  else
+		self:PrintError("Raid Builder module not loaded.")
+	  end
+	  return
+
+	elseif command == "lfm" then
+	  if TacticaRaidBuilder and TacticaRaidBuilder.AnnounceOnce then TacticaRaidBuilder.AnnounceOnce() end
 
     elseif command == "autopost" then
 		-- toggle only
@@ -853,26 +862,38 @@ end
 
 -- Post Frame Lock/Position Handling
 function Tactica:SavePostFramePosition()
-    if not self.postFrame then return end
-    
-    local point, _, relativePoint, x, y = self.postFrame:GetPoint()
-    TacticaDB.Settings.PostFrame.position = {
-        point = point,
-        relativeTo = "UIParent",
-        relativePoint = relativePoint,
-        x = x,
-        y = y
-    }
-    TacticaDB.Settings.PostFrame.locked = self.postFrame.locked
+  if not self.postFrame then return end
+  if not TacticaDB then TacticaDB = {} end
+  TacticaDB.Settings = TacticaDB.Settings or {}
+  TacticaDB.Settings.PostFrame = TacticaDB.Settings.PostFrame or {}
+
+  local point, _, relativePoint, x, y = self.postFrame:GetPoint()
+  TacticaDB.Settings.PostFrame.position = {
+    point = point or "CENTER",
+    relativeTo = "UIParent",
+    relativePoint = relativePoint or point or "CENTER",
+    x = x or 0,
+    y = y or 0,
+  }
+  TacticaDB.Settings.PostFrame.locked = (self.postFrame.locked == true)
 end
 
 function Tactica:RestorePostFramePosition()
-    if not self.postFrame or not TacticaDB.Settings.PostFrame then return end
-    
-    local pos = TacticaDB.Settings.PostFrame.position
+  if not self.postFrame then return end
+  if not (TacticaDB and TacticaDB.Settings and TacticaDB.Settings.PostFrame) then
     self.postFrame:ClearAllPoints()
-    self.postFrame:SetPoint(pos.point, pos.relativeTo, pos.relativePoint, pos.x, pos.y)
-    self.postFrame.locked = TacticaDB.Settings.PostFrame.locked
+    self.postFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    return
+  end
+  local pf = TacticaDB.Settings.PostFrame
+  local p  = pf.position or {}
+  self.postFrame:ClearAllPoints()
+  if p.point then
+    self.postFrame:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
+  else
+    self.postFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+  end
+  self.postFrame.locked = (pf.locked == true)
 end
 
 function Tactica:StringsEqual(a, b)
@@ -984,6 +1005,10 @@ function Tactica:PrintHelp()
     self:PrintMessage("    - Post Tanks/Healers/DPS to raid (DPS = the rest).")
 	self:PrintMessage("  |cffffff00/tt options|r")
 	self:PrintMessage("    - Open a small options panel for toggles.")
+	self:PrintMessage("  |cffffff78/tt build|r")
+	self:PrintMessage("    – Open Raid Builder to create auto-adjusting LFM announcements.")
+	self:PrintMessage("  |cffffff78/tt lfm|r")
+	self:PrintMessage("    – Announce current Raid Builder message")
 	self:PrintMessage("  |cffffff00/w Doite|r");
     self:PrintMessage("    - Addon and tactics by Doite - msg if incorrect.");
 end
@@ -1665,6 +1690,7 @@ function Tactica:CreatePostFrame()
 
     -- Initialize dropdowns
     f:SetScript("OnShow", function()
+	 Tactica:RestorePostFramePosition()
         -- Initialize raid dropdown
         UIDropDownMenu_Initialize(raidDropdown, function()
             local raids = {
@@ -1697,9 +1723,6 @@ function Tactica:CreatePostFrame()
 				not (TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == false)
 			)
 		end
-		
-        -- Restore position
-        Tactica:RestorePostFramePosition()
 		
 		if UpdateLockIcon then UpdateLockIcon() end
 		
@@ -1801,43 +1824,15 @@ function Tactica:CreatePostFrame()
         end
     end)
 	
-	--[[	-- Auto Master Loot checkbox (below Auto-open)
-	local autoML = CreateFrame("CheckButton", "TacticaAutoMasterLootCB", f, "UICheckButtonTemplate")
-	autoML:SetWidth(24); autoML:SetHeight(24)
-	autoML:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 60)
-	local autoMLTxt = getglobal("TacticaAutoMasterLootCBText")
-	if autoMLTxt then autoMLTxt:SetText("Auto Master Loot on boss") end
-	autoML:SetChecked(TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoMasterLoot)
-	autoML:SetScript("OnClick", function()
-		if not (TacticaDB and TacticaDB.Settings) then return end
-		TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
-		TacticaDB.Settings.Loot.AutoMasterLoot = autoML:GetChecked() and true or false
-		if TacticaDB.Settings.Loot.AutoMasterLoot then
-			Tactica:PrintMessage("Auto Master Loot is |cff00ff00ON|r.")
-		else
-			Tactica:PrintMessage("Auto Master Loot is |cffff5555OFF|r.")
-		end
-	end)
-
-	-- Group Loot popup checkbox (to the right of Auto-ML)
-	local autoGL = CreateFrame("CheckButton", "TacticaAutoGroupPopupCB", f, "UICheckButtonTemplate")
-	autoGL:SetWidth(24); autoGL:SetHeight(24)
-	autoGL:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 40)
-	local autoGLTxt = getglobal("TacticaAutoGroupPopupCBText")
-	if autoGLTxt then autoGLTxt:SetText("Ask to switch to Group Loot") end
-	autoGL:SetChecked(TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoGroupPopup)
-	autoGL:SetScript("OnClick", function()
-		if not (TacticaDB and TacticaDB.Settings) then return end
-		TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
-		TacticaDB.Settings.Loot.AutoGroupPopup = autoGL:GetChecked() and true or false
-		if TacticaDB.Settings.Loot.AutoGroupPopup then
-			Tactica:PrintMessage("Group Loot popup is |cff00ff00ON|r.")
-		else
-			Tactica:PrintMessage("Group Loot popup is |cffff5555OFF|r.")
-		end
-	end)]]
-
-    self.postFrame = f
+	-- one-time restore + lock state after building the frame
+	Tactica:RestorePostFramePosition()
+	if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.PostFrame then
+	  f.locked = (TacticaDB.Settings.PostFrame.locked == true)
+	else
+	  f.locked = false
+	end
+	if UpdateLockIcon then UpdateLockIcon() end
+	self.postFrame = f
 end
 
 function Tactica:CreateRemoveFrame()
@@ -2243,10 +2238,10 @@ Tactica.DefaultData = {
 			["Default"] = "Tanks: MT face away. Watch position of healers.\nDPS: Stay behind boss. Move out during Frenzy/Panic. Avoid fire patches. Max range.\nHealers: Heal spikes, prio MT. Cover Panic. Fearward tank.\nClass Specific: Hunters Tranq Frenzy. Priests Fear Ward tank. Shamans Tremor Totem.\nBoss Ability: Frenzy (tranq), Panic fear, fire patches."
 		},
 		["Smoldaris & Basalthar"] = {
-			["Default"] = "Tanks: 1 tank each. Smoldaris: FR gear, tank on spot face away (will do a fire-cone). Basalthar: watch knockback, tank against wall (entrence).\nDPS: Attack Smoldaris or Basalthar depending on Molten Bulwark buff on boss. Avoid cone + AoE knockback. Swap between when called buff is up on bosses.\nHealers: Heavy tank heals on Smoldaris. Heal repositioning after knockbacks. Smoldaris will do AoE - heal through.\nClass Specific: FR pots useful. MDPS max melee range. Track Bulwark.\nBoss Ability: Smoldaris cone + AoE fire blasts. Basalthar knockback. Both will get buff Molten Bulwark (swap to other boss)."
+			["Default"] = "Tanks: 1 tank each. Smoldaris: FR gear, tank on spot face away (will do a fire-cone). Basalthar: watch knockback, tank against wall (entrence - towards same side as Smoldaris).\nDPS: Attack Smoldaris or Basalthar depending on Molten Bulwark buff on boss (start Basalthar). Avoid cone + AoE knockback. Swap between when called buff is up on bosses. Range stand where Basalthar is before pull.\nHealers: Heavy tank heals on Smoldaris. Heal repositioning after knockbacks. Smoldaris will do AoE - heal through. Stand with range where Smoldaris is before pull.\nClass Specific: FR pots useful. MDPS max melee range. Track Bulwark.\nBoss Ability: Smoldaris cone + AoE fire blasts. Basalthar knockback. Both will get buff Molten Bulwark (swap to other boss)."
 		},
 		["Garr"] = {
-			["Default"] = "Tanks: MT on Garr. OTs split adds, face to walls. Kill some adds first—each killed increases Garr dmg taken but also his dmg dealt.\nDPS: Kill 3-4 adds, then boss. After boss dies, kill rest adds. Avoid add deaths near you.\nHealers: Assign 1 per add tank. Cover Garr dmg scaling.\nClass Specific: Warlocks banish adds.\nBoss Ability: Fire Sworn Fortification stacks based on adds killed."
+			["Default"] = "Tanks: MT on Garr. OTs split adds, face to walls. Kill some adds first—each killed increases Garr dmg taken but also his dmg dealt.\nDPS: Kill 3-4 adds, then boss. After boss dies, kill rest adds. Avoid add deaths near you. MDPS can be on boss, and RDPS on adds until 4 are dead (easier). Focus one at a time.\nHealers: Assign 1 per add tank. Cover Garr dmg scaling.\nClass Specific: Warlocks banish adds.\nBoss Ability: Fire Sworn Fortification stacks based on adds killed."
 		},
 		["Baron Geddon"] = {
 			["Default"] = "Tanks: MT position boss, keep ranged 40y out. FR gear recommended. Don’t outrange healers. Max range MDPS if tank gets bomb. Move out from AoE.\nDPS: Melee run out on Inferno. Ranged stack max range. Run out when you get Living Bomb away from group (towards wall). Living Bomb leaves ground AoE—use 5 preset explosion spots.\nHealers: Heal bomb targets + AoE. Watch ground AoEs.\nClass Specific: Priests/Paladins dispel Ignite Mana. Shield bomb targets.\nBoss Ability: Living Bomb + leaves ground AoE, Inferno around boss. Preselect 5 spots for bombs and alternate between."
@@ -2255,7 +2250,7 @@ Tactica.DefaultData = {
 			["Default"] = "Tanks: MT boss away from ranged. OTs taunt after Blinks.\nDPS: Ranged max spread. Melee reposition fast after Blinks. Burn quickly.\nHealers: Cover tank + AoE bursts. Stay spread.\nClass Specific: Priests/Shamans dispel Deaden Magic on boss. Mages/Druids decurse(!).\nBoss Ability: Blink + Arcane Explosion, Deaden Magic, curse."
 		},
 		["Sulfuron Harbinger"] = {
-			["Default"] = "Tanks: MT on boss, 1-2 OTs on Adds and Sons. Stack all adds onto boss.\nDPS: Kill Sons first (prio) when spawned > then adds of Sulfuron > then boss. Interrupt Dark Mending.\nHealers: Assign 1 per tank. Cover add dmg.\nClass Specific: Rogues/Warriors kick heals.\nBoss Ability: Summons Sons. Dark Mending heals (interrupt)."
+			["Default"] = "Tanks: MT on boss, 1-2 OTs on Adds and Sons. Stack all adds onto boss.\nDPS: Kill Sons first (prio) when spawned > then adds of Sulfuron > then boss. Interrupt Dark Mending. All stack on boss.\nHealers: Assign 1 per tank. Cover add dmg. All stack on boss.\nClass Specific: Rogues/Warriors kick heals.\nBoss Ability: Summons Sons (all stack on boss - kill Sons first). Dark Mending heals (interrupt)."
 		},
 		["Golemagg the Incinerator"] = {
 			["Default"] = "Tanks: MT on boss. 2-3 OTs on Core Hounds. Dogs will auto-switch to random target adding 10k threat—OT taunt quickly away from boss. Must kill all other MC bosses first.\nDPS: Full focus boss. Ignore dogs. Stay behind. Move out if to many stacks.\nHealers: Heavy tank heals and MDPS. Watch OTs.\nBoss Ability: Core Hounds swap threat. High fire dmg. Pre-req: clear all bosses."
@@ -2267,7 +2262,7 @@ Tactica.DefaultData = {
 			["Default"] = "Tanks: MT back towards wall/pillar vs knockback. OT pick mirror at 50%. Both tanks - Center boss on ground marked Rune of Power. Move out of rune (spread) on Rune of Detonation, stay on rune on Rune of Combustion.\nDPS: Focus boss - ignore clone. Back facing wall (knockback). Spread for Detonation out of marking (dont stand on Rune of Power), while during Rune on Combustion move in (stand on Rune of Power).\nHealers: Follow MT and DPS. Move out on Detonation (spread) and move in on marking during Combustion. Care knockback and have back facing wall.\nClass Specific: Quick movement. All classes - not a DPS race. Move out & spread from Rune of Power (marking on ground) when Rune of Detonation. Else stay on and in.\nBoss Ability: Rune of Power on ground - Mark of Detonation (spread and move out), Mark of Combustion (stack and move in), if none (stay in). Mirror add at 50%, knockbacks."
 		},
 		["Ragnaros"] = {
-			["Default"] = "Tanks: 2 tanks. MT in front, OT ready. Swap after/if current tanks get Wrath of Ragnaros knockbacked. FR gear high. At 50% submerge, tanks grab adds in FR gear.\nDPS: Melee stack behind. Ranged spread ≥8y. Kill adds at 50% quickly, then boss. MDPS move out during Wrath of Ragnaros (avoid knockback).\nHealers: Spread ≥8y. Heal Wrath + Lava Burst dmg. Focus tanks.\nClass Specific: Ret/Survival Hunters/Enh Shamans form mana melee grp.\nBoss Ability: Wrath of Ragnaros knockback (move out MDPS, not MT), Lava Burst, submerge + adds at 50%."
+			["Default"] = "Tanks: 2 tanks. MT in front, OT ready. Swap after/if current tanks get Wrath of Ragnaros knockbacked. FR gear high. At 50% submerge, tanks stack (entire raid) grab adds in FR gear.\nDPS: Melee stack behind. Ranged spread ≥8y. Kill adds at 50% quickly (stack), then boss. MDPS move out during Wrath of Ragnaros (avoid knockback).\nHealers: Spread ≥8y. Heal Wrath + Lava Burst dmg. Focus tanks.\nClass Specific: Ret/Survival Hunters/Enh Shamans form mana melee grp.\nBoss Ability: Wrath of Ragnaros knockback (move out MDPS, not MT), Lava Burst, submerge + adds at 50%."
 		}
     },
     ["Blackwing Lair"] = {
