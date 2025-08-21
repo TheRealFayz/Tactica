@@ -57,14 +57,14 @@ local BuilderDefaults = {
     size=40, tanks=3, healers=8, srs=2,
     notes={
       dispel=6, cleanse=0, decurse=6,
-      tranq=2, purge=0, sheep=2, banish=2, shackle=0, sleep=0, fear=2,
+      tranq=2, purge=0, sheep=2, banish=2, shackle=0, sleep=0, fear=4,
     }
   },
   ["Blackwing Lair"] = {
     size=40, tanks=3, healers=8, srs=2,
     notes={
       dispel=4, cleanse=4, decurse=4,
-      tranq=2, purge=0, sheep=0, banish=0, shackle=0, sleep=2, fear=2,
+      tranq=2, purge=0, sheep=0, banish=0, shackle=0, sleep=2, fear=4,
     }
   },
   ["Zul'Gurub"] = {
@@ -91,7 +91,7 @@ local BuilderDefaults = {
   ["Onyxia's Lair"] = {
     size=40, tanks=1, healers=8, srs=1,
     notes={
-      dispel=4, cleanse=0, decurse=0,
+      dispel=0, cleanse=0, decurse=0,
       tranq=0, purge=0, sheep=0, banish=0, shackle=0, sleep=0, fear=4,
     }
   },
@@ -113,7 +113,7 @@ local BuilderDefaults = {
     size=40, tanks=4, healers=10, srs=2,
     notes={
       dispel=6, cleanse=6, decurse=6,
-      tranq=1, purge=0, sheep=0, banish=2, shackle=3, sleep=0, fear=4,
+      tranq=1, purge=0, sheep=0, banish=2, shackle=3, sleep=0, fear=6,
     }
   },
 	["Emerald Sanctum"] = {
@@ -269,7 +269,7 @@ local function CompositionText(raidName, raidSize)
 
   -- build "Label X/Y" parts (omit those with Y==0)
   local parts = {}
-  for _,key in ipairs({ "dispel","cleanse","decurse","tranq","purge","sheep","banish","shackle","sleep" }) do
+  for _,key in ipairs({ "dispel","cleanse","decurse","tranq","purge","sheep","banish","shackle","sleep","fear" }) do
     local Y = suggested[key] or 0
     if Y > 0 then
       local X = RB_CountUtility(key)
