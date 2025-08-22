@@ -30,6 +30,141 @@ end
 local function Saved() EnsureDB(); return TacticaDB.Builder end
 local function RB_Print(msg) local cf=DEFAULT_CHAT_FRAME or ChatFrame1; if cf then cf:AddMessage(msg) end end
 
+-- Preset DB
+local function PresetsDB()
+  EnsureDB()
+  if not TacticaDB.BuilderPresets then TacticaDB.BuilderPresets = {} end
+  return TacticaDB.BuilderPresets
+end
+
+-- Shallow copy of the fields to persist (no 'auto'/'running')
+local function RB_SnapshotForPreset()
+  return {
+    raid      = RB.state.raid,
+    worldBoss = RB.state.worldBoss,
+    esMode    = RB.state.esMode,
+    size      = RB.state.size,
+    size_selected = RB.state.size_selected and true or false,
+    tanks     = RB.state.tanks,
+    healers   = RB.state.healers,
+    srs       = RB.state.srs,
+    hr        = RB.state.hr,
+    free      = RB.state.free,
+    canSum    = RB.state.canSum and true or false,
+    chWorld   = RB.state.chWorld and true or false,
+    chLFG     = RB.state.chLFG and true or false,
+    chYell    = RB.state.chYell and true or false,
+    interval  = RB.state.interval,
+  }
+end
+
+local function RB_PresetNamesSorted()
+  local t = {}
+  for name,_ in pairs(PresetsDB()) do table.insert(t, name) end
+  table.sort(t, function(a,b) return string.lower(a)<string.lower(b) end)
+  return t
+end
+
+local function DD_SetWidth(drop, w)
+  if UIDropDownMenu_SetWidth then
+    local ok = pcall(UIDropDownMenu_SetWidth, w, drop)
+    if not ok then UIDropDownMenu_SetWidth(drop, w) end
+  else
+    drop:SetWidth(w)
+  end
+end
+
+
+local function RB_Trim(s)
+  s = s or ""
+  s = string.gsub(s, "^%s+", "")
+  s = string.gsub(s, "%s+$", "")
+  return s
+end
+
+
+-- Apply a preset payload directly into state and UI
+local function RB_ApplyPresetData(p)
+  if not p then return end
+
+  -- State
+  RB.state.raid        = p.raid
+  RB.state.worldBoss   = p.worldBoss
+  RB.state.esMode      = p.esMode
+  RB.state.size        = p.size
+  RB.state.size_selected = p.size_selected and true or false
+  RB.state.tanks       = p.tanks
+  RB.state.healers     = p.healers
+  RB.state.srs         = p.srs
+  RB.state.hr          = p.hr or ""
+  RB.state.free        = p.free or ""
+  RB.state.canSum      = p.canSum and true or false
+  RB.state.chWorld     = p.chWorld and true or false
+  RB.state.chLFG       = p.chLFG and true or false
+  RB.state.chYell      = p.chYell and true or false
+  RB.state.interval    = (p.interval == 60 or p.interval == 120 or p.interval == 300) and p.interval or 120
+
+  -- UI reflect raid & mode/boss visibility
+  if RB.state.raid == "World Bosses" then
+    RB.ddWBoss:Show(); RB.ddESMode:Hide()
+  elseif RB.state.raid == "Emerald Sanctum" then
+    RB.ddESMode:Show(); RB.ddWBoss:Hide()
+  else
+    RB.ddWBoss:Hide(); RB.ddESMode:Hide()
+  end
+
+  -- Update all dropdown texts
+  UIDropDownMenu_SetText(RB.state.raid or "Select Raid", RB.ddRaid)
+  if RB.state.worldBoss then UIDropDownMenu_SetText(RB.state.worldBoss, RB.ddWBoss) else UIDropDownMenu_SetText("Pick Boss", RB.ddWBoss) end
+  if RB.state.esMode then UIDropDownMenu_SetText(RB.state.esMode, RB.ddESMode) else UIDropDownMenu_SetText("Select Mode", RB.ddESMode) end
+
+  if RB.state.size_selected and RB.state.size then
+    UIDropDownMenu_SetText(tostring(RB.state.size), RB.ddSize)
+    if RB.state.tanks then   UIDropDownMenu_SetText(RB.state.tanks   .. " Tanks",   RB.ddTanks)   end
+    if RB.state.healers then UIDropDownMenu_SetText(RB.state.healers .. " Healers", RB.ddHealers) end
+    UIDropDownMenu_SetText((RB.state.srs or 0) .. " SR", RB.ddSRs)
+  else
+    UIDropDownMenu_SetText("Select Size", RB.ddSize)
+    UIDropDownMenu_SetText("Pick Size first", RB.ddTanks)
+    UIDropDownMenu_SetText("Pick Size first", RB.ddHealers)
+    UIDropDownMenu_SetText("0 SR", RB.ddSRs)
+  end
+
+  -- Interval & channel toggles & edit boxes
+  UIDropDownMenu_SetText((RB.state.interval==60) and "1" or (RB.state.interval==300 and "5" or "2"), RB.ddInterval)
+  if RB.cbWorld then RB.cbWorld:SetChecked(RB.state.chWorld) end
+  if RB.cbLFG   then RB.cbLFG:SetChecked(RB.state.chLFG)   end
+  if RB.cbYell  then RB.cbYell:SetChecked(RB.state.chYell) end
+  if RB.cbCanSum then RB.cbCanSum:SetChecked(RB.state.canSum) end
+  if RB.editHR  then RB.editHR:SetText(RB.state.hr or "") end
+  if RB.editFree then RB.editFree:SetText(RB.state.free or "") end
+
+  RB.SaveState()
+  RB.RefreshPreview()
+end
+
+function RB.SavePreset(name)
+  name = RB_Trim(name)
+  if name == "" then RB_Print("|cffff6666[Tactica]:|r Enter a preset name to save."); return end
+  local db = PresetsDB()
+  db[name] = RB_SnapshotForPreset()
+  RB_Print("|cff33ff99[Tactica]:|r Preset saved: |cffffff00"..name.."|r.")
+end
+
+function RB.LoadPreset(name)
+  local p = PresetsDB()[name]
+  if not p then RB_Print("|cffff6666[Tactica]:|r Preset not found: "..tostring(name)); return end
+  RB_ApplyPresetData(p)
+  RB_Print("|cff33ff99[Tactica]:|r Preset loaded: |cffffff00"..name.."|r.")
+end
+
+function RB.RemovePreset(name)
+  local db = PresetsDB()
+  if not db[name] then RB_Print("|cffff6666[Tactica]:|r Preset not found: "..tostring(name)); return end
+  db[name] = nil
+  RB_Print("|cff33ff99[Tactica]:|r Preset removed: |cffffff00"..name.."|r.")
+end
+
 -------------------------------------------------
 -- Allowed sizes per raid
 -------------------------------------------------
@@ -222,34 +357,6 @@ local function RB_CountUtility(utilKey)
   return count
 end
 
--- Exclude certain roles from specific utilities
-local function RB_IsTank(name)
-  return TacticaDB and TacticaDB.Tanks and TacticaDB.Tanks[name] == true
-end
-
--- Return false if this player shouldn't count toward a given utility
-local function RB_ShouldCountForUtility(name, classLoc, utilKey)
-  -- Opposite behavior: DRUID/PALADIN tanks don't count for these
-  if utilKey == "DISPEL" or utilKey == "CLEANSE" or utilKey == "DECURSE" then
-    if RB_IsTank(name) and (classLoc == "Druid" or classLoc == "Paladin") then
-      return false
-    end
-  end
-  return true
-end
-
-
-local function CountRaidClasses(classset)
-  local n = GetNumRaidMembers and GetNumRaidMembers() or 0
-  if n <= 0 then return 0 end
-  local c = 0
-  for i=1,n do
-    local name, rank, subgroup, level, class = GetRaidRosterInfo(i)
-    if class and classset[class] then c = c + 1 end
-  end
-  return c
-end
-
 local function CompositionText(raidName, raidSize)
   if not raidName or not BuilderDefaults[raidName] then return "" end
   local base = BuilderDefaults[raidName].notes or {}
@@ -351,7 +458,7 @@ RB._lastManual = 0
 -------------------------------------------------
 -- Channels + announce helpers
 -------------------------------------------------
-local function BuildNeedString(raidSize, tanksWant, healersWant, srsWant)
+local function BuildNeedString(raidSize, tanksWant, healersWant)
   local inRaid = GetNumRaidMembers and GetNumRaidMembers() or 0
   local needM  = raidSize and (raidSize - inRaid) or 0
   if needM < 0 then needM = 0 end
@@ -403,7 +510,7 @@ local function EffectiveRaidNameAndLabel()
 end
 
 local function BuildLFM(raidLabelForMsg, raidSize, tanksWant, healersWant, srsWant, hrText, canSum, freeText)
-  local needM, needStr = BuildNeedString(raidSize, tanksWant, healersWant, srsWant)
+  local needM, needStr = BuildNeedString(raidSize, tanksWant, healersWant)
 
   local srTxt  = (srsWant and srsWant > 0) and (srsWant .. "xSR") or "No SR"
   local hrTxt  = (hrText and hrText ~= "") and (" (HR " .. hrText .. ")") or ""
@@ -780,10 +887,32 @@ end
 -------------------------------------------------
 -- Auto announce loop & roster changes
 -------------------------------------------------
+
+-- Auto-stop when current raid member count reaches the selected size.
+local function RB_CheckAndStopIfFull()
+  if not RB.state or not RB.state.running then return false end
+  local target = RB.state.size
+  if not target or target <= 0 then return false end
+
+  local inRaid = GetNumRaidMembers and GetNumRaidMembers() or 0
+  if inRaid >= target then
+    RB.state.running = false
+    RB.state.auto    = false
+    RB._warnOk       = false
+    if RB.cbAuto then RB.cbAuto:SetChecked(false) end
+    RB.SaveState()
+    RB.UpdateButtonsForRunning()
+    RB_Print("|cff33ff99[Tactica]:|r Auto-announce has been disabled as you've reached full raid ("..inRaid.."/"..target.."). Ensure you have the correct raid comp, by assigning roles on the raid roster (right clicking on players).")
+    return true
+  end
+  return false
+end
+
 RB._dirty, RB._lastSend = false, 0
 RB._poll = RB._poll or CreateFrame("Frame")
 RB._poll:SetScript("OnUpdate", function()
   if not RB.state.running then return end
+  if RB_CheckAndStopIfFull() then return end
   local now = GetTime and GetTime() or 0
   local gap = RB.state.interval or 120
   if RB._dirty and (now - RB._lastSend) >= gap then
@@ -805,7 +934,8 @@ RB._evt:SetScript("OnEvent", function()
   if ev == "PLAYER_ENTERING_WORLD" then
     RB.state.running = false; RB._warnOk = false; RB.UpdateButtonsForRunning()
   else
-    RB._dirty = true
+    if RB_CheckAndStopIfFull() then return end
+	RB._dirty = true
     RB.RefreshPreview()
   end
 end)
@@ -824,13 +954,15 @@ local function ShowAutoConfirm()
   wf:SetWidth(360); wf:SetHeight(140)
   wf:SetPoint("CENTER", parent, "CENTER", 0, 0)
   wf:SetBackdrop({
-    bgFile="Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile=true, tileSize=32, edgeSize=32,
-    insets={ left=11, right=12, top=12, bottom=11 }
-  })
-  wf:SetFrameStrata("FULLSCREEN_DIALOG")
-  wf:EnableMouse(true)
+	  bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+	  edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+	  tile = true, tileSize = 16, edgeSize = 32,
+	  insets = { left=11, right=12, top=12, bottom=11 }
+	})
+	wf:SetBackdropColor(0, 0, 0, 1)
+	wf:SetBackdropBorderColor(1, 1, 1, 1)
+	wf:SetFrameStrata("FULLSCREEN_DIALOG")
+	wf:EnableMouse(true)
 
   local h = wf:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   h:SetPoint("TOP", wf, "TOP", 0, -12)
@@ -840,7 +972,7 @@ local function ShowAutoConfirm()
   b:SetPoint("TOPLEFT", wf, "TOPLEFT", 18, -36)
   b:SetWidth(320)
   b:SetJustifyH("LEFT")
-  b:SetText("You have selected to auto-announce. Therefore, you can not close the Tactica Raid Builder window, until you stop auto-announcing.")
+  b:SetText("You have selected to auto-announce. Therefore, you can not close the Tactica Raid Builder window, until you stop auto-announcing. USE RESPECTFULLY!")
 
   local btnAgree = CreateFrame("Button", nil, wf, "UIPanelButtonTemplate")
   btnAgree:SetWidth(100); btnAgree:SetHeight(22)
@@ -1044,7 +1176,7 @@ function RB.Open()
 
   local f = CreateFrame("Frame", "TacticaRaidBuilderFrame", UIParent)
   RB.frame = f
-  f:SetWidth(475); f:SetHeight(390)
+  f:SetWidth(475); f:SetHeight(420)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   f:SetBackdrop({ bgFile="Interface\\DialogFrame\\UI-DialogBox-Background",
     edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border", tile=true, tileSize=32, edgeSize=32,
@@ -1059,6 +1191,7 @@ function RB.Open()
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -14)
   title:SetText("Tactica Raid Builder")
+  title:SetFontObject(GameFontNormalLarge)
 
   RB.btnClose = CreateFrame("Button", nil, f, "UIPanelCloseButton")
   RB.btnClose:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
@@ -1078,12 +1211,141 @@ function RB.Open()
   end)
   RB.lockButton:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
 
+  -- Preset row (top-right, between title and close)
+  local lblPreset = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  lblPreset:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -42)
+  lblPreset:SetText("Preset:")
+
+  RB.editPresetName = CreateFrame("EditBox", "TacticaRBPresetName", f, "InputBoxTemplate")
+  RB.editPresetName:SetPoint("LEFT", lblPreset, "RIGHT", 10, 0)
+  RB.editPresetName:SetAutoFocus(false); RB.editPresetName:SetWidth(100); RB.editPresetName:SetHeight(18)
+  RB.editPresetName:SetMaxLetters(24)
+
+  RB.ddPresetLoad = CreateFrame("Frame", "TacticaRBPresetLoad", f, "UIDropDownMenuTemplate")
+  RB.ddPresetLoad:SetPoint("LEFT", RB.editPresetName, "RIGHT", -13, -3)
+  UIDropDownMenu_SetWidth(70, RB.ddPresetLoad)
+
+  RB.ddPresetRemove = CreateFrame("Frame", "TacticaRBPresetRemove", f, "UIDropDownMenuTemplate")
+  RB.ddPresetRemove:SetPoint("LEFT", RB.ddPresetLoad, "RIGHT", -26, 0)
+  UIDropDownMenu_SetWidth(70, RB.ddPresetRemove)
+
+  RB.btnPresetAction = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+  RB.btnPresetAction:SetWidth(64); RB.btnPresetAction:SetHeight(20)
+  RB.btnPresetAction:SetPoint("LEFT", RB.ddPresetRemove, "RIGHT", -13, 2)
+
+  -- Internal selection trackers
+  RB._presetLoadSel, RB._presetRemoveSel = nil, nil
+
+	local function RB_UpdatePresetButtonText()
+	  local hasName = RB_Trim(RB.editPresetName:GetText() or "") ~= ""
+	  local list = RB_PresetNamesSorted()
+	  local any = table.getn(list) > 0
+	  RB.btnPresetAction:SetText((hasName or not any) and "Save" or "Submit")
+	end
+
+  -- Dropdown initializers (populate on open)
+  local function InitPresetLoadDD()
+    UIDropDownMenu_Initialize(RB.ddPresetLoad, function()
+      local names = RB_PresetNamesSorted()
+      if table.getn(names) == 0 then
+        UIDropDownMenu_AddButton({ text="No presets", notClickable=1, isTitle=1 })
+        return
+      end
+      for i=1, table.getn(names) do
+        local nm = names[i]
+        UIDropDownMenu_AddButton({
+          text = nm, value = nm,
+          func = function()
+            RB._presetLoadSel = nm
+            RB._presetRemoveSel = nil
+            UIDropDownMenu_SetText(nm, RB.ddPresetLoad)
+            UIDropDownMenu_SetText("Remove", RB.ddPresetRemove)
+            RB.editPresetName:SetText("")
+            RB_UpdatePresetButtonText()
+            CloseDropDownMenus()
+          end
+        })
+      end
+    end)
+    UIDropDownMenu_SetText("Load", RB.ddPresetLoad)
+  end
+
+  local function InitPresetRemoveDD()
+    UIDropDownMenu_Initialize(RB.ddPresetRemove, function()
+      local names = RB_PresetNamesSorted()
+      if table.getn(names) == 0 then
+        UIDropDownMenu_AddButton({ text="No presets", notClickable=1, isTitle=1 })
+        return
+      end
+      for i=1, table.getn(names) do
+        local nm = names[i]
+        UIDropDownMenu_AddButton({
+          text = nm, value = nm,
+          func = function()
+            RB._presetRemoveSel = nm
+            RB._presetLoadSel = nil
+            UIDropDownMenu_SetText(nm, RB.ddPresetRemove)
+            UIDropDownMenu_SetText("Load", RB.ddPresetLoad)
+            RB.editPresetName:SetText("")
+            RB_UpdatePresetButtonText()
+            CloseDropDownMenus()
+          end
+        })
+      end
+    end)
+    UIDropDownMenu_SetText("Remove", RB.ddPresetRemove)
+  end
+
+  RB.InitPresetDropdowns = function()
+    InitPresetLoadDD()
+    InitPresetRemoveDD()
+    RB_UpdatePresetButtonText()
+  end
+
+  -- Action button behavior
+  RB.btnPresetAction:SetScript("OnClick", function()
+    local name = RB_Trim(RB.editPresetName:GetText() or "")
+    if name ~= "" then
+      RB.SavePreset(name)
+      -- refresh menus after save
+      RB.InitPresetDropdowns()
+      return
+    end
+    if RB._presetLoadSel then
+      RB.LoadPreset(RB._presetLoadSel)
+      -- reset selection labels
+      RB._presetLoadSel = nil
+      UIDropDownMenu_SetText("Load", RB.ddPresetLoad)
+      RB_UpdatePresetButtonText()
+      return
+    end
+    if RB._presetRemoveSel then
+      RB.RemovePreset(RB._presetRemoveSel)
+      -- refresh menus after remove
+      RB._presetRemoveSel = nil
+      RB.InitPresetDropdowns()
+      return
+    end
+    RB_Print("|cffff6666[Tactica]:|r Enter a name to Save, or pick a preset to Load/Remove.")
+  end)
+
+  RB.editPresetName:SetScript("OnTextChanged", RB_UpdatePresetButtonText)
+  RB.editPresetName:SetScript("OnEnterPressed", function() RB.btnPresetAction:Click() end)
+  RB.editPresetName:SetScript("OnEscapePressed", function() this:ClearFocus() end)
+
+  -- separator line before setup
+  local sep = f:CreateTexture(nil, "ARTWORK")
+  sep:SetHeight(1)
+  sep:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -65)
+  sep:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -65)
+  sep:SetTexture(1, 1, 1); if sep.SetVertexColor then sep:SetVertexColor(1, 1, 1, 0.25) end
+
   -- Labels & dropdowns
   local lblRaid = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  lblRaid:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -46); lblRaid:SetText("Raid:")
+  lblRaid:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -76); lblRaid:SetText("Raid:")
 
   RB.ddRaid = CreateFrame("Frame", "TacticaRBRaid", f, "UIDropDownMenuTemplate")
-  RB.ddRaid:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -40); RB.ddRaid:SetWidth(180)
+  RB.ddRaid:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -70); RB.ddRaid:SetWidth(180)
 
   RB.ddWBoss  = CreateFrame("Frame", "TacticaRBWorldBoss", f, "UIDropDownMenuTemplate")
   RB.ddWBoss:SetPoint("LEFT", RB.ddRaid, "RIGHT", 0, 0); RB.ddWBoss:SetWidth(160)
@@ -1092,53 +1354,53 @@ function RB.Open()
   RB.ddESMode:SetPoint("LEFT", RB.ddRaid, "RIGHT", 0, 0); RB.ddESMode:SetWidth(160)
 
   local lblSize = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  lblSize:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -80); lblSize:SetText("Size:")
+  lblSize:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -110); lblSize:SetText("Size:")
 
   RB.ddSize = CreateFrame("Frame", "TacticaRBSize", f, "UIDropDownMenuTemplate")
-  RB.ddSize:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -74); RB.ddSize:SetWidth(90)
+  RB.ddSize:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -104); RB.ddSize:SetWidth(90)
 
   local lblT = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  lblT:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -112); lblT:SetText("Tanks:")
+  lblT:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -142); lblT:SetText("Tanks:")
 
   RB.ddTanks = CreateFrame("Frame", "TacticaRBTanks", f, "UIDropDownMenuTemplate")
-  RB.ddTanks:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -106); RB.ddTanks:SetWidth(90)
+  RB.ddTanks:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -136); RB.ddTanks:SetWidth(90)
 
   local lblH = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  lblH:SetPoint("TOPLEFT", f, "TOPLEFT", 240, -112); lblH:SetText("Healers:")
+  lblH:SetPoint("TOPLEFT", f, "TOPLEFT", 240, -142); lblH:SetText("Healers:")
 
   RB.ddHealers = CreateFrame("Frame", "TacticaRBHealers", f, "UIDropDownMenuTemplate")
-  RB.ddHealers:SetPoint("TOPLEFT", f, "TOPLEFT", 300, -106); RB.ddHealers:SetWidth(90)
+  RB.ddHealers:SetPoint("TOPLEFT", f, "TOPLEFT", 300, -136); RB.ddHealers:SetWidth(90)
 
   local lblSR = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  lblSR:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -144); lblSR:SetText("SR:")
+  lblSR:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -174); lblSR:SetText("SR:")
 
   RB.ddSRs = CreateFrame("Frame", "TacticaRBSRs", f, "UIDropDownMenuTemplate")
-  RB.ddSRs:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -138); RB.ddSRs:SetWidth(90)
+  RB.ddSRs:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -168); RB.ddSRs:SetWidth(90)
 
   local lblHR = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  lblHR:SetPoint("TOPLEFT", f, "TOPLEFT", 240, -144); lblHR:SetText("HR (max 65 char):")
+  lblHR:SetPoint("TOPLEFT", f, "TOPLEFT", 240, -174); lblHR:SetText("HR (max 65 char):")
 
   RB.editHR = CreateFrame("EditBox", "TacticaRBHR", f, "InputBoxTemplate")
-  RB.editHR:SetPoint("TOPLEFT", f, "TOPLEFT", 350, -140)
+  RB.editHR:SetPoint("TOPLEFT", f, "TOPLEFT", 350, -170)
   RB.editHR:SetAutoFocus(false); RB.editHR:SetWidth(100); RB.editHR:SetHeight(20)
   RB.editHR:SetMaxLetters(65); RB.editHR:SetText(RB.state.hr or "")
   RB.editHR:SetScript("OnTextChanged", OnEditHRChanged)
 
   -- Free text
   local lblFree = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  lblFree:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -175); lblFree:SetText("Free text (max 65 char):")
+  lblFree:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -205); lblFree:SetText("Free text (max 65 char):")
 
   RB.editFree = CreateFrame("EditBox", "TacticaRBFree", f, "InputBoxTemplate")
-  RB.editFree:SetPoint("TOPLEFT", f, "TOPLEFT", 165, -171)
+  RB.editFree:SetPoint("TOPLEFT", f, "TOPLEFT", 165, -201)
   RB.editFree:SetAutoFocus(false); RB.editFree:SetWidth(100); RB.editFree:SetHeight(20)
   RB.editFree:SetMaxLetters(65); RB.editFree:SetText(RB.state.free or "")
   RB.editFree:SetScript("OnTextChanged", OnEditFreeChanged)
 
-  -- separator line
+  -- separator line before preview
   local sep = f:CreateTexture(nil, "ARTWORK")
   sep:SetHeight(1)
-  sep:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -193)
-  sep:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -193)
+  sep:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -225)
+  sep:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -225)
   sep:SetTexture(1, 1, 1); if sep.SetVertexColor then sep:SetVertexColor(1, 1, 1, 0.25) end
 
   -- Channels, Can Summon & Auto-Announce
@@ -1148,7 +1410,7 @@ function RB.Open()
   RB.cbCanSum:SetChecked(RB.state.canSum); RB.cbCanSum:SetScript("OnClick", OnCanSumClick)
 
   RB.cbWorld = CreateFrame("CheckButton", "TacticaRBWorld", f, "UICheckButtonTemplate")
-  RB.cbWorld:SetWidth(20); RB.cbWorld:SetHeight(20); RB.cbWorld:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -199)
+  RB.cbWorld:SetWidth(20); RB.cbWorld:SetHeight(20); RB.cbWorld:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -229)
   getglobal("TacticaRBWorldText"):SetText("World")
   RB.cbWorld:SetChecked(RB.state.chWorld); RB.cbWorld:SetScript("OnClick", function() RB.state.chWorld = this:GetChecked() and true or false; RB.SaveState() end)
 
@@ -1169,11 +1431,11 @@ function RB.Open()
 
   -- Interval (1/2/5 minutes; default 2)
   local lblInt = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  lblInt:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -228)
+  lblInt:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -261)
   lblInt:SetText("Auto-Announce Interval (min):")
 
   RB.ddInterval = CreateFrame("Frame", "TacticaRBInterval", f, "UIDropDownMenuTemplate")
-  RB.ddInterval:SetPoint("TOPLEFT", f, "TOPLEFT", 180, -223)
+  RB.ddInterval:SetPoint("TOPLEFT", f, "TOPLEFT", 180, -253)
   UIDropDownMenu_Initialize(RB.ddInterval, function()
     local function add(sec, title)
       local info = {}; info.text = title; info.value = sec
@@ -1190,20 +1452,21 @@ function RB.Open()
   end)
   UIDropDownMenu_SetSelectedValue(RB.ddInterval, RB.state.interval)
   UIDropDownMenu_SetText((RB.state.interval==60) and "1" or (RB.state.interval==300 and "5" or "2"), RB.ddInterval)
+  UIDropDownMenu_SetWidth(50, RB.ddInterval)
 
   -- Suggested composition (yellow head + grey body), then Preview, then Note
 	RB.lblNotes = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	RB.lblNotes:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -255)
+	RB.lblNotes:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -285)
 	RB.lblNotes:SetWidth(430)
 	RB.lblNotes:SetJustifyH("LEFT")
 	RB.lblNotes:SetText("")
 
   RB.lblPreview = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblPreview:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -280)
+  RB.lblPreview:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -310)
   RB.lblPreview:SetWidth(430); RB.lblPreview:SetJustifyH("LEFT"); RB.lblPreview:SetText("|cff33ff99Preview:|r ")
 
   RB.lblHint = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblHint:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -325)
+  RB.lblHint:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -355)
   RB.lblHint:SetWidth(430)
   RB.lblHint:SetJustifyH("LEFT")
   RB.lblHint:SetText("|cffffd100Note:|r |cff999999Assign roles (Tank / Healer / DPS) to players in the Raid Roster (hotkey: "
@@ -1239,7 +1502,7 @@ function RB.Open()
 
   RB.btnClear = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   RB.btnClear:SetWidth(70); RB.btnClear:SetHeight(22)
-  RB.btnClear:SetPoint("LEFT", RB.btnRaid, "RIGHT", 6, 0)
+  RB.btnClear:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -16, 15)
   RB.btnClear:SetText("Clear"); RB.btnClear:SetScript("OnClick", OnClearClick)
 
   -- Init dropdowns & restore
@@ -1251,6 +1514,7 @@ function RB.Open()
   setN(RB.ddTanks,  "Tanks",   1, 10, function(n) RB.state.tanks = n end)
   setN(RB.ddHealers,"Healers", 1, 10, function(n) RB.state.healers = n end)
   setN(RB.ddSRs,    "SR",      0,  3, function(n) RB.state.srs = n end)
+  RB.InitPresetDropdowns()
 
   if not RB.state.size_selected then
     UIDropDownMenu_SetText("Pick Size first", RB.ddTanks)

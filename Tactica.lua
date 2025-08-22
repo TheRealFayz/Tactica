@@ -1178,7 +1178,7 @@ function Tactica:ShowOptionsFrame()
   f:SetFrameStrata("DIALOG")
 
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOP", f, "TOP", 0, -10)
+  title:SetPoint("TOP", f, "TOP", 0, -12)
   title:SetText("Tactica Options")
 
   -- helper to build one checkbox + label, and return the checkbox
@@ -1363,6 +1363,7 @@ function Tactica:CreateAddFrame()
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOP", f, "TOP", 0, -15)
     title:SetText("Add New Tactic")
+	title:SetFontObject(GameFontNormalLarge)
 
     -- RAID DROPDOWN
     local raidLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1582,7 +1583,8 @@ function Tactica:CreatePostFrame()
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -15)
-    title:SetText("Post Tactic to Raid")
+    title:SetText("Post Tactic")
+	title:SetFontObject(GameFontNormalLarge)
 
     -- Close button (X)
     local closeButton = CreateFrame("Button", nil, f, "UIPanelCloseButton")
