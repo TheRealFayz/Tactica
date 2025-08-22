@@ -11,8 +11,8 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 - `/tt add` to add your custom tactics ("enter" for line breaks will divide tactic into separate /raid msg's).
 - `/tt remove` to remove your custom tactics.
 - `/tt <Raid Name>,<Boss Name>,[Tactic Name(optional)]` for macro use of Tactica tactics.
-<img width="269" height="225" alt="image" src="https://github.com/user-attachments/assets/1831fbbb-7480-44e6-bc9d-11d3fea815b9" />
-<img width="496" height="372" alt="Tactica Add" src="https://github.com/user-attachments/assets/383e90da-8d17-4957-8306-3c48e1798d18" />
+<img width="269" height="227" alt="Tactica-Post" src="https://github.com/user-attachments/assets/9879895e-5b73-4098-88f9-d298b794a349" />
+<img width="497" height="370" alt="Tactica-Add" src="https://github.com/user-attachments/assets/95ed350c-f5a6-45ef-bc4f-aa5a8a8beff3" />
 
 ### 2. Organize your comp at a glance
 - Right-click raid roster to Toggle as Healer / DPS / Tank. Roles sync to everyone running Tactica; latest leader/assist decision wins.
@@ -29,7 +29,7 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 - Syncs with raid roster, so when you assign a role - the LFM announcement will adjust accordingly.
 - `/tt build` for the LFM/raid builder UI.
 - `/tt lfm` posts once using your current Builder settings and respects a 30s cooldown (shared with the “Announce” button).
-<img width="584" height="479" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/3c604380-aec9-4a5e-994d-2651e1faca90" />
+<img width="589" height="521" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/5259a1c7-722b-46d0-8b51-6fa4d1e375ad" />
 
 ### 4. Loot mode QoL for bosses
 - Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). (same as the checkbox in **/tt options**).
