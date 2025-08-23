@@ -2,6 +2,8 @@
 ## Post tactics, build raids, set loot rules & assign roles, synced!
 Tactical addon for raid leading with ease — post ~90 clear boss strategies (or add your own), build raids (LFM creator/poster), assign & sync roles in raid roster, and smooth out loot mode changes, all in one place.
 
+_Access all functionalities and commands via **Minimap Icon**._
+
 ## What it does (TL;DR)
 ### 1. Announce tactics fast
 - Post default or custom strategies to self or raid with one click or `/tt post` commands. Auto-popup on boss (toggleable).
