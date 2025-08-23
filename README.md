@@ -38,6 +38,7 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 <img width="287" height="161" alt="Tactica-loot" src="https://github.com/user-attachments/assets/f8fcd04a-8060-4fa1-bb13-7d76810d9800" />
 
 ## Quick start
+- Use the **minimap icon** — full access and command list
 - `/tt` or `/tactica` or `/tt help` — full command list
 - `/tt options` — open the Options UI
 - Toggle auto behaviors in the option UI (checkboxes), or use the slash commands mentioned in help.
