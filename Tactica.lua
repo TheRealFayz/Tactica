@@ -638,12 +638,12 @@ function Tactica:CommandHandler(msg)
     local args = self:GetArgs(msg)
     local command = string.lower(args[1] or "")
 
-    -- Always allow "help", "list", "add", and "remove"
     if command == "" then
-		self:ShowPostPopup(true)
-	elseif command == "help" then
-		self:PrintHelp()
-
+        self:PrintHelp()
+        return
+    elseif command == "help" then
+        self:PrintHelp()
+        return
     elseif command == "list" then
         self:ListAvailableTactics()
 
@@ -654,7 +654,6 @@ function Tactica:CommandHandler(msg)
         self:ShowRemovePopup()
 
     elseif command == "post" then
-        -- open the post UI
         self:ShowPostPopup(true)
 
 	elseif command == "build" then
@@ -867,7 +866,7 @@ function Tactica:SavePostFramePosition()
   TacticaDB.Settings = TacticaDB.Settings or {}
   TacticaDB.Settings.PostFrame = TacticaDB.Settings.PostFrame or {}
 
-  local point, _, relativePoint, x, y = self.postFrame:GetPoint()
+  local point, _, relativePoint, x, y = self.postFrame:GetPoint(1)
   TacticaDB.Settings.PostFrame.position = {
     point = point or "CENTER",
     relativeTo = "UIParent",
@@ -1567,6 +1566,8 @@ function Tactica:CreatePostFrame()
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
+	f:SetClampedToScreen(true)
+	if f.SetUserPlaced then f:SetUserPlaced(true) end
     f.locked = false
     
     f:SetScript("OnDragStart", function()
@@ -1591,6 +1592,10 @@ function Tactica:CreatePostFrame()
     closeButton:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
     closeButton:SetScript("OnClick", function() f:Hide() end)
 
+	f:SetScript("OnHide", function()
+	  Tactica:SavePostFramePosition()
+	end)
+	
 	 -- Lock button (icon)
 	local lockButton = CreateFrame("Button", "TacticaLockButton", f)
 	lockButton:SetWidth(18); lockButton:SetHeight(18)
@@ -1692,7 +1697,10 @@ function Tactica:CreatePostFrame()
 
     -- Initialize dropdowns
     f:SetScript("OnShow", function()
-	 Tactica:RestorePostFramePosition()
+	if not f._restoredOnce then
+	  Tactica:RestorePostFramePosition()
+	  f._restoredOnce = true
+	end
         -- Initialize raid dropdown
         UIDropDownMenu_Initialize(raidDropdown, function()
             local raids = {
@@ -1825,17 +1833,20 @@ function Tactica:CreatePostFrame()
             Tactica:PrintMessage("Auto-popup is |cffff5555OFF|r. Use '/tt post' or '/tt autopost' to enable.")
         end
     end)
-	
-	-- one-time restore + lock state after building the frame
+	self.postFrame = f
 	Tactica:RestorePostFramePosition()
+	f._restoredOnce = true
 	if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.PostFrame then
 	  f.locked = (TacticaDB.Settings.PostFrame.locked == true)
 	else
 	  f.locked = false
 	end
 	if UpdateLockIcon then UpdateLockIcon() end
-	self.postFrame = f
 end
+
+-------------------------------------------------
+-- REMOVE TACTIC UI
+-------------------------------------------------
 
 function Tactica:CreateRemoveFrame()
     if self.removeFrame then return end
@@ -1863,7 +1874,7 @@ function Tactica:CreateRemoveFrame()
     local closeButton = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
     closeButton:SetScript("OnClick", function() f:Hide() end)
-
+	
     -- RAID DROPDOWN
     local raidLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     raidLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -40)
