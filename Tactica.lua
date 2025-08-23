@@ -424,7 +424,7 @@ f:SetScript("OnEvent", function()
         InitializeSavedVariables()
         RunLaterTactica(1, function()
 		  local cf = DEFAULT_CHAT_FRAME or ChatFrame1
-		  cf:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r or |cffffff00/tactica help|r.")
+		  cf:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt|r or |cffffff00/tactica|r or |cffffff00minimap icon.|r")
 		end)
     elseif event == "PLAYER_ENTERING_WORLD" then
     RunLaterTactica(10, function() Tactica_BroadcastVersionAll() end)
@@ -2196,6 +2196,153 @@ function Tactica:ShowRemovePopup()
     end
     
     self.removeFrame:Show()
+end
+
+-------------------------------------------------
+-- MINIMAP ICON & MENU (self-contained section)
+-------------------------------------------------
+do
+  -- small SV pocket; create defaults on first load
+  local function _MiniSV()
+    TacticaDB                = TacticaDB or {}
+    TacticaDB.Settings       = TacticaDB.Settings or {}
+    TacticaDB.Settings.Minimap = TacticaDB.Settings.Minimap or {
+      angle = 215,
+      offset = 0,
+      locked = false,
+      hide = false,
+    }
+    return TacticaDB.Settings.Minimap
+  end
+
+  -- compute minimap button position
+  local function _PlaceMini(btn)
+    local sv = _MiniSV()
+    local rad = math.rad(sv.angle or 215)
+    local r   = (80 + (sv.offset or 0))
+    local x   = 53 - (r * math.cos(rad))
+    local y   = (r * math.sin(rad)) - 55
+    btn:ClearAllPoints()
+    btn:SetPoint("TOPLEFT", Minimap, "TOPLEFT", x, y)
+  end
+
+  -- help lines for tooltip (keep in sync with /tt help)
+  local function _HelpLines()
+    return {
+      "|cffffff00/tt help|r – show commands",
+      "|cffffff00/tt post|r – open post UI",
+      "|cffffff00/tt add|r – add custom tactic",
+      "|cffffff00/tt remove|r – remove custom tactic",
+      "|cffffff00/tt list|r – list all tactics",
+      "|cffffff00/tt autopost|r – toggle auto-open on boss",
+      "|cffffff00/tt roles|r – post tank/healer summary",
+      "|cffffff00/tt rolewhisper|r – toggle role whisper",
+      "|cffffff78/tt build|r – open Raid Builder",
+      "|cffffff78/tt lfm|r – announce Raid Builder msg",
+      "|cffffff00/tt options|r – options panel",
+    }
+  end
+
+  -------------------------------------------------
+  -- The drop-down menu
+  -------------------------------------------------
+  local menu = CreateFrame("Frame", "TacticaMinimapMenu", UIParent, "UIDropDownMenuTemplate")
+  local function _MenuInit()
+    local info
+
+    info = { isTitle = 1, text = "Tactica", notCheckable = 1, justifyH = "CENTER" }
+    UIDropDownMenu_AddButton(info, 1)
+
+    local add = function(text, fn, disabled)
+      info = { notCheckable = 1, text = text, disabled = disabled and true or nil, func = fn }
+      UIDropDownMenu_AddButton(info, 1)
+    end
+
+    add("Open Post Tactics", function() if Tactica and Tactica.ShowPostPopup then Tactica:ShowPostPopup(true) end end)
+    add("Open Add Tactics",  function() if Tactica and Tactica.ShowAddPopup  then Tactica:ShowAddPopup()  end end)
+    add("Open Remove Tactics", function() if Tactica and Tactica.ShowRemovePopup then Tactica:ShowRemovePopup() end end)
+    add("Open Raid Builder", function()
+      if TacticaRaidBuilder and TacticaRaidBuilder.Open then
+        TacticaRaidBuilder.Open()
+      else
+        if Tactica and Tactica.PrintError then Tactica:PrintError("Raid Builder module not loaded.") end
+      end
+    end)
+    add("Open Options", function() if Tactica and Tactica.ShowOptionsFrame then Tactica:ShowOptionsFrame() end end)
+    add("Tactica Help",  function() if Tactica and Tactica.PrintHelp then Tactica:PrintHelp() end end)
+  end
+  menu.initialize = _MenuInit
+  menu.displayMode = "MENU"
+
+  -------------------------------------------------
+  -- The minimap button
+  -------------------------------------------------
+  local btn = CreateFrame("Button", "TacticaMinimapButton", Minimap)
+  btn:SetFrameStrata("MEDIUM")
+  btn:SetWidth(31); btn:SetHeight(31)
+
+  -- art
+  local overlay = btn:CreateTexture(nil, "OVERLAY")
+  overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+  overlay:SetWidth(54); overlay:SetHeight(54)
+  overlay:SetPoint("TOPLEFT", 0, 0)
+
+  local icon = btn:CreateTexture(nil, "BACKGROUND")
+  icon:SetTexture("Interface\\AddOns\\Tactica\\Media\\tactica-icon")
+  icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
+  icon:SetWidth(20); icon:SetHeight(20)
+  icon:SetPoint("TOPLEFT", 6, -6)
+
+  local hlt = btn:CreateTexture(nil, "HIGHLIGHT")
+  hlt:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+  hlt:SetBlendMode("ADD")
+  hlt:SetAllPoints(btn)
+
+  btn:RegisterForDrag("LeftButton", "RightButton")
+  btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+  -- drag to move (unless locked)
+  btn:SetScript("OnDragStart", function()
+    local sv = _MiniSV()
+    if sv.locked then return end
+    btn:SetScript("OnUpdate", function()
+      local x, y = GetCursorPosition()
+      local mx, my = Minimap:GetCenter()
+      local scale = Minimap:GetEffectiveScale()
+      local ang = math.deg(math.atan2(y/scale - my, x/scale - mx))
+      _MiniSV().angle = ang
+      _PlaceMini(btn)
+    end)
+  end)
+  btn:SetScript("OnDragStop", function() btn:SetScript("OnUpdate", nil) end)
+
+  -- click: open drop-down (left or right)
+  btn:SetScript("OnClick", function()
+    ToggleDropDownMenu(1, nil, menu, "TacticaMinimapButton", 0, 0)
+  end)
+
+  -- tooltip: first line + the help list
+  btn:SetScript("OnEnter", function()
+    GameTooltip:SetOwner(btn, "ANCHOR_LEFT")
+	GameTooltip:AddLine("TACTICA", 0.2, 1.0, 0.6)
+    GameTooltip:AddLine("Click minimap icon to open menu", 1, 1, 1)
+    GameTooltip:AddLine(" ")
+    for _, line in ipairs(_HelpLines()) do
+      GameTooltip:AddLine(line, 0.9, 0.9, 0.9, 1)
+    end
+    GameTooltip:Show()
+  end)
+  btn:SetScript("OnLeave", function() if GameTooltip:IsOwned(btn) then GameTooltip:Hide() end end)
+
+  -- show/hide + initial placement on addon load
+  local ev = CreateFrame("Frame")
+  ev:RegisterEvent("ADDON_LOADED")
+  ev:SetScript("OnEvent", function()
+    if event ~= "ADDON_LOADED" or arg1 ~= "Tactica" then return end
+    local sv = _MiniSV()
+    if sv.hide then btn:Hide() else btn:Show() end
+    _PlaceMini(btn)
+  end)
 end
 
 -------------------------------------------------
