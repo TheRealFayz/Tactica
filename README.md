@@ -4,8 +4,8 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 
 ## What it does (TL;DR)
 ### 1. Announce tactics fast
-- Post default or custom strategies to self or raid with one click or /tt commands. Auto-popup on boss (toggleable).
-- `/tt` or `/tt post` for settings and frame.
+- Post default or custom strategies to self or raid with one click or `/tt post` commands. Auto-popup on boss (toggleable).
+- `/tt post` for settings and frame.
 - `/tt auto` toggles the auto-popup on boss (same as the checkbox in **/tt options**).
 - `/tt list` for all raid tactics available (default and custom).
 - `/tt add` to add your custom tactics ("enter" for line breaks will divide tactic into separate /raid msg's).
@@ -38,9 +38,8 @@ Tactical addon for raid leading with ease — post ~90 clear boss strategies (or
 <img width="287" height="161" alt="Tactica-loot" src="https://github.com/user-attachments/assets/f8fcd04a-8060-4fa1-bb13-7d76810d9800" />
 
 ## Quick start
-- `/tt` or `/tactica` — open the Post UI
+- `/tt` or `/tactica` or `/tt help` — full command list
 - `/tt options` — open the Options UI
-- `/tt help` — full command list
 - Toggle auto behaviors in the option UI (checkboxes), or use the slash commands mentioned in help.
 <img width="288" height="174" alt="image" src="https://github.com/user-attachments/assets/d5d322dd-9e92-447d-892c-b896e787ce1d" />
 
