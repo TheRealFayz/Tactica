@@ -584,6 +584,7 @@ function RB.ApplySaved()
   RB.state.auto     = false
   RB.state.running  = false
   RB._warnOk        = false
+  RB._nextSend      = nil
 end
 
 function RB.SaveState()
@@ -645,6 +646,7 @@ function RB.UpdateButtonsForRunning()
   else
     if RB.btnAnnounce then RB.btnAnnounce:SetText("Announce") end
     if RB.btnClose then RB.btnClose:Enable();  RB.btnClose:SetAlpha(1.0) end
+    RB._nextSend = nil -- clear scheduled tick when not running
   end
 end
 
@@ -833,6 +835,7 @@ local function RB_CheckAndStopIfFull()
     RB.state.running = false
     RB.state.auto    = false
     RB._warnOk       = false
+    RB._nextSend     = nil
     if RB.cbAuto then RB.cbAuto:SetChecked(false) end
     RB.SaveState()
     RB.UpdateButtonsForRunning()
@@ -842,7 +845,7 @@ local function RB_CheckAndStopIfFull()
   return false
 end
 
-RB._dirty, RB._lastSend = false, 0
+RB._dirty, RB._lastSend, RB._nextSend = false, 0, nil
 RB._poll = RB._poll or CreateFrame("Frame")
 RB._poll:SetScript("OnUpdate", function()
   if RB_CheckAndStopIfFull() then return end
@@ -857,12 +860,19 @@ RB._poll:SetScript("OnUpdate", function()
     if ua > 0 then RB_NudgeAssignRoles(ua) end
   end
 
-  if RB._dirty and (now - RB._lastSend) >= gap then
-    RB._dirty = false; RB._lastSend = now
+  -- STRICT time-based interval: always post each interval while running
+  if not RB._nextSend then
+    RB._nextSend = now + gap
+  end
+
+  if now >= RB._nextSend then
     local _, short = EffectiveRaidNameAndLabel()
     if short then
       local msg = BuildLFM(short, RB.state.size, RB.state.tanks, RB.state.healers, RB.state.srs, RB.state.hr, RB.state.canSum, RB.state.free, RB.state.hideNeed)
       Announce(msg, false, RB.state.chWorld, RB.state.chLFG, RB.state.chYell)
+      RB._lastSend = now
+      -- schedule the next tick strictly after this one
+      RB._nextSend = now + gap
     end
   end
 end)
@@ -874,7 +884,7 @@ RB._evt:RegisterEvent("PLAYER_ENTERING_WORLD")
 RB._evt:SetScript("OnEvent", function()
   local ev = event
   if ev == "PLAYER_ENTERING_WORLD" then
-    RB.state.running = false; RB._warnOk = false; RB.UpdateButtonsForRunning()
+    RB.state.running = false; RB._warnOk = false; RB._nextSend = nil; RB.UpdateButtonsForRunning()
   else
     if RB_CheckAndStopIfFull() then return end
     RB._dirty = true
@@ -919,7 +929,7 @@ local function ShowAutoConfirm()
   local b = wf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   b:SetPoint("TOPLEFT", wf, "TOPLEFT", 18, -36)
   b:SetWidth(320); b:SetJustifyH("LEFT")
-  b:SetText("Auto-announce will keep this window open until stopped. USE RESPECTFULLY!")
+  b:SetText("You have selected to auto-announce. Therefore, you can not close the Tactica Raid Builder window, until you stop auto-announcing. USE RESPECTFULLY!")
 
   local btnAgree = CreateFrame("Button", nil, wf, "UIPanelButtonTemplate")
   btnAgree:SetWidth(100); btnAgree:SetHeight(22)
@@ -929,15 +939,16 @@ local function ShowAutoConfirm()
     RB._warnOk = true
     wf:Hide()
     RB.state.running = true
-    RB._dirty = true
-    RB._lastSend = 0
     RB.SaveState()
     RB.UpdateButtonsForRunning()
+
     local _, short = EffectiveRaidNameAndLabel()
     if short then
       local msg = BuildLFM(short, RB.state.size, RB.state.tanks, RB.state.healers, RB.state.srs, RB.state.hr, RB.state.canSum, RB.state.free, RB.state.hideNeed)
       Announce(msg, false, RB.state.chWorld, RB.state.chLFG, RB.state.chYell)
-      RB._lastSend = GetTime and GetTime() or 0
+      local now = GetTime and GetTime() or 0
+      RB._lastSend = now
+      RB._nextSend = now + (RB.state.interval or 120)
       local ua = RB_GetUnassignedCount()
       if ua > 0 then RB_NudgeAssignRoles(ua) end
     end
@@ -953,6 +964,7 @@ local function ShowAutoConfirm()
     if RB.cbAuto then RB.cbAuto:SetChecked(false) end
     RB._warnOk = false
     RB.state.running = false
+    RB._nextSend = nil
     RB.SaveState()
     RB.UpdateButtonsForRunning()
   end)
@@ -988,6 +1000,7 @@ local function OnAutoClick()       RB.state.auto   = this:GetChecked() and true 
 local function OnAnnounceClick()
   if RB.state.running then
     RB.state.running = false
+    RB._nextSend = nil
     RB.SaveState()
     RB.UpdateButtonsForRunning()
     return
@@ -1000,15 +1013,15 @@ local function OnAnnounceClick()
   if RB.state.auto then
     if not RB._warnOk then ShowAutoConfirm(); return end
     RB.state.running = true
-    RB._dirty = true
-    RB._lastSend = 0
     RB.SaveState()
     RB.UpdateButtonsForRunning()
     local _, short = EffectiveRaidNameAndLabel()
     if short then
       local msg = BuildLFM(short, RB.state.size, RB.state.tanks, RB.state.healers, RB.state.srs, RB.state.hr, RB.state.canSum, RB.state.free, RB.state.hideNeed)
       Announce(msg, false, RB.state.chWorld, RB.state.chLFG, RB.state.chYell)
-      RB._lastSend = GetTime and GetTime() or 0
+      local now = GetTime and GetTime() or 0
+      RB._lastSend = now
+      RB._nextSend = now + (RB.state.interval or 120)
       local ua = RB_GetUnassignedCount()
       if ua > 0 then RB_NudgeAssignRoles(ua) end
     end
@@ -1099,7 +1112,7 @@ local function OnClearClick()
   RB.cbWorld:SetChecked(RB.state.chWorld)
   RB.cbLFG:SetChecked(RB.state.chLFG)
   RB.cbYell:SetChecked(RB.state.chYell)
-  RB.cbAuto:SetChecked(false); RB.state.auto=false; RB.state.running=false; RB._warnOk=false; RB.UpdateButtonsForRunning()
+  RB.cbAuto:SetChecked(false); RB.state.auto=false; RB.state.running=false; RB._warnOk=false; RB._nextSend=nil; RB.UpdateButtonsForRunning()
   RB.cbCanSum:SetChecked(RB.state.canSum)
   if RB.cbHideNeed then RB.cbHideNeed:SetChecked(RB.state.hideNeed) end
   RB.editHR:SetText(RB.state.hr or "")
@@ -1149,7 +1162,7 @@ function RB.Open()
   f.locked = false
   f:SetScript("OnDragStart", function() if not f.locked then f:StartMoving() end end)
   f:SetScript("OnDragStop",  function() f:StopMovingOrSizing(); SaveFramePosition() end)
-  f:SetScript("OnHide", function() RB.state.running=false; RB._warnOk=false; RB.UpdateButtonsForRunning() end)
+  f:SetScript("OnHide", function() RB.state.running=false; RB._warnOk=false; RB._nextSend=nil; RB.UpdateButtonsForRunning() end)
 
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -14)
@@ -1400,6 +1413,10 @@ function RB.Open()
         RB.state.interval = picked; RB.SaveState()
         UIDropDownMenu_SetSelectedValue(RB.ddInterval, picked)
         UIDropDownMenu_SetText(title, RB.ddInterval)
+        -- If currently running, reschedule next strict tick from now
+        if RB.state.running then
+          RB._nextSend = (GetTime and GetTime() or 0) + picked
+        end
         CloseDropDownMenus()
       end
       UIDropDownMenu_AddButton(info)
