@@ -495,7 +495,7 @@ function Tactica:HandleTargetChange()
         return
     end
 
-    -- Check if we've already posted for this boss recently
+    -- Check if already posted for this boss recently
     local key = raidName..":"..bossName
     if self.RecentlyPosted[key] then
         return
@@ -531,7 +531,7 @@ function Tactica:IsBossTarget()
 
   -- Determine friendliness/hostility
   local isHostile = UnitCanAttack and UnitCanAttack("player", "target")
-  -- Treat "friendly" as "not hostile" for our purposes
+  -- Treat "friendly" as "not hostile" for the purpose
   local isFriendly = not isHostile
 
   local lname = string.lower(targetName)
@@ -664,6 +664,14 @@ function Tactica:CommandHandler(msg)
 	  end
 	  return
 
+	elseif command == "autoinvite" then
+	  if TacticaInvite and TacticaInvite.Open then
+		TacticaInvite.Open()
+	  else
+		self:PrintError("Auto-Invite module not loaded.")
+	  end
+	  return
+
 	elseif command == "lfm" then
 	  if TacticaRaidBuilder and TacticaRaidBuilder.AnnounceOnce then TacticaRaidBuilder.AnnounceOnce() end
 
@@ -737,7 +745,7 @@ function Tactica:PostTactic(raidName, bossName, tacticName)
             SendChatMessage("--- "..string.upper(bossName or "DEFAULT").." STRATEGY (read chat) ---", "RAID_WARNING");
         end
         
-		-- We only post to raid
+		-- only post to raid
 		local chatType = "RAID"
 
         for line in string.gmatch(tacticText, "([^\n]+)") do
@@ -982,16 +990,22 @@ end
 
 function Tactica:PrintHelp()
     self:PrintMessage("Tactica Commands:");
-    self:PrintMessage("  |cffffff00/tt <Raid>,<Boss>,[Tactic]|r");
-    self:PrintMessage("    - Posts a tactic with header to Raid Warning and each line to Raid.");
-    self:PrintMessage("  |cffffff00/tt add|r");
-    self:PrintMessage("    - Opens a popup to add a custom tactic.");
+	self:PrintMessage("  |cffffff78/tt build|r")
+	self:PrintMessage("    – Open Raid Builder to create auto-adjusting LFM announcements.")
+	self:PrintMessage("  |cffffff78/tt lfm|r")
+	self:PrintMessage("    – Announce current Raid Builder message")
+	self:PrintMessage("  |cffffff78/tt autoinvite|r")
+	self:PrintMessage("    – Open Auto-Invite window (aliases: |cffffff00/ttai|r)")
     self:PrintMessage("  |cffffff00/tt post|r");
     self:PrintMessage("    - Opens a popup to select and post a tactic.");
-    self:PrintMessage("  |cffffff00/tt list|r");
-    self:PrintMessage("    - Lists all available tactics.");
+	self:PrintMessage("  |cffffff00/tt <Raid>,<Boss>,[Tactic]|r");
+    self:PrintMessage("    - Posts a tactic via command (for Macros).");
+    self:PrintMessage("  |cffffff00/tt add|r");
+    self:PrintMessage("    - Opens a popup to add a custom tactic.");
     self:PrintMessage("  |cffffff00/tt remove|r");
     self:PrintMessage("    - Opens a popup to remove a custom tactic.");
+    self:PrintMessage("  |cffffff00/tt list|r");
+    self:PrintMessage("    - Lists all available tactics.");
 	self:PrintMessage("  |cffffff00/tt autopost|r");
     self:PrintMessage("    - Toggle the auto-popup when targeting a boss.");
 	self:PrintMessage("  |cffffff00/ttpush|r or |cffffff00/tt pushroles|r");
@@ -1004,10 +1018,6 @@ function Tactica:PrintHelp()
     self:PrintMessage("    - Post Tanks/Healers/DPS to raid (DPS = the rest).")
 	self:PrintMessage("  |cffffff00/tt options|r")
 	self:PrintMessage("    - Open a small options panel for toggles.")
-	self:PrintMessage("  |cffffff78/tt build|r")
-	self:PrintMessage("    – Open Raid Builder to create auto-adjusting LFM announcements.")
-	self:PrintMessage("  |cffffff78/tt lfm|r")
-	self:PrintMessage("    – Announce current Raid Builder message")
 	self:PrintMessage("  |cffffff00/w Doite|r");
     self:PrintMessage("    - Addon and tactics by Doite - msg if incorrect.");
 end
@@ -1125,7 +1135,7 @@ function Tactica:PostRoleSummary()
     postNames("Tanks",   tanks)
     postNames("Healers", healers)
 
-    -- DPS = everyone not marked T/H (we don’t list names; just the count)
+    -- DPS = everyone not marked T/H (don’t list names; just the count)
     local nT       = (table.getn and table.getn(tanks))   or 0
     local nH       = (table.getn and table.getn(healers)) or 0
     local dpsTotal = total - nT - nH
@@ -1168,13 +1178,15 @@ function Tactica:ShowOptionsFrame()
   local f = CreateFrame("Frame", "TacticaOptionsFrame", UIParent)
   f:SetWidth(235); f:SetHeight(145)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-  f:SetBackdrop({
-    bgFile  = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile= "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true, tileSize = 32, edgeSize = 32,
-    insets = { left = 11, right = 12, top = 12, bottom = 11 }
+    f:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 16, edgeSize = 32,
+    insets = { left=11, right=12, top=12, bottom=11 }
   })
-  f:SetFrameStrata("DIALOG")
+	f:SetBackdropColor(0, 0, 0, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
+	f:SetFrameStrata("DIALOG")
 
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOP", f, "TOP", 0, -12)
@@ -1191,7 +1203,7 @@ function Tactica:ShowOptionsFrame()
     return cb
   end
 
-  -- create all checkboxes and keep references so we can refresh them
+  -- create all checkboxes and keep references - can refresh them
   f.cbAutoPost    = mkcb("TacticaOptAutoPost",    -28, "Auto-open Post UI on boss")
   f.cbAutoML      = mkcb("TacticaOptAutoML",      -48, "Auto Master Loot on boss (RL)")
   f.cbAutoGroup   = mkcb("TacticaOptAutoGroup",   -68, "Loot popup after boss (RL)")
@@ -1350,12 +1362,14 @@ function Tactica:CreateAddFrame()
     f:SetHeight(300)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 11, right = 12, top = 12, bottom = 11 }
-    })
-    f:SetFrameStrata("DIALOG")
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 16, edgeSize = 32,
+    insets = { left=11, right=12, top=12, bottom=11 }
+  })
+	f:SetBackdropColor(0, 0, 0, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
+	f:SetFrameStrata("DIALOG")
     f:Hide()
     
     -- Title
@@ -1557,12 +1571,14 @@ function Tactica:CreatePostFrame()
     f:SetHeight(185)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 11, right = 12, top = 12, bottom = 11 }
-    })
-    f:SetFrameStrata("DIALOG")
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 16, edgeSize = 32,
+    insets = { left=11, right=12, top=12, bottom=11 }
+  })
+	f:SetBackdropColor(0, 0, 0, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
+	f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
@@ -1664,7 +1680,7 @@ function Tactica:CreatePostFrame()
 	  if GameTooltip then GameTooltip:Hide() end
 	end)
 
-	-- store a reference so we can tint while options is open
+	-- store a reference - tint while options is open
 	Tactica.optionsButton = optionsButton
 
 	
@@ -1857,12 +1873,14 @@ function Tactica:CreateRemoveFrame()
     f:SetHeight(165)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 11, right = 12, top = 12, bottom = 11 }
-    })
-    f:SetFrameStrata("DIALOG")
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 16, edgeSize = 32,
+    insets = { left=11, right=12, top=12, bottom=11 }
+  })
+	f:SetBackdropColor(0, 0, 0, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
+	f:SetFrameStrata("DIALOG")
     f:Hide()
     
     -- Title
@@ -2185,11 +2203,11 @@ function Tactica:ShowRemovePopup()
     UIDropDownMenu_SetText(Tactica.selectedBoss or "Select Boss", TacticaRemoveBossDropdown)
     UIDropDownMenu_SetText("Select Tactic", TacticaRemoveTacticDropdown)
     
-    -- If we have a selected raid with custom tactics, update boss dropdown
+    -- If selected raid with custom tactics, update boss dropdown
     if Tactica.selectedRaid and TacticaDB.CustomTactics[Tactica.selectedRaid] then
         self:UpdateRemoveBossDropdown(Tactica.selectedRaid)
         
-        -- If we have a selected boss with custom tactics, update tactic dropdown
+        -- If selected boss with custom tactics, update tactic dropdown
         if Tactica.selectedBoss and TacticaDB.CustomTactics[Tactica.selectedRaid][Tactica.selectedBoss] then
             self:UpdateRemoveTacticDropdown(Tactica.selectedRaid, Tactica.selectedBoss)
         end
@@ -2230,6 +2248,9 @@ do
   local function _HelpLines()
     return {
       "|cffffff00/tt help|r – show commands",
+	  "|cffffff78/tt build|r – open Raid Builder",  
+	  "|cffffff78/tt lfm|r – announce Raid Builder msg",
+	  "|cffffff78/tt autoinvite|r – open Auto Invite",
       "|cffffff00/tt post|r – open post UI",
       "|cffffff00/tt add|r – add custom tactic",
       "|cffffff00/tt remove|r – remove custom tactic",
@@ -2237,14 +2258,12 @@ do
       "|cffffff00/tt autopost|r – toggle auto-open on boss",
       "|cffffff00/tt roles|r – post tank/healer summary",
       "|cffffff00/tt rolewhisper|r – toggle role whisper",
-      "|cffffff78/tt build|r – open Raid Builder",
-      "|cffffff78/tt lfm|r – announce Raid Builder msg",
       "|cffffff00/tt options|r – options panel",
     }
   end
 
   -------------------------------------------------
-  -- The drop-down menu
+  -- The drop-down minimap menu
   -------------------------------------------------
   local menu = CreateFrame("Frame", "TacticaMinimapMenu", UIParent, "UIDropDownMenuTemplate")
   local function _MenuInit()
@@ -2266,6 +2285,13 @@ do
         TacticaRaidBuilder.Open()
       else
         if Tactica and Tactica.PrintError then Tactica:PrintError("Raid Builder module not loaded.") end
+      end
+    end)
+	add("Open Auto Invite", function()
+      if TacticaInvite and TacticaInvite.Open then
+        TacticaInvite.Open()
+      else
+        if Tactica and Tactica.PrintError then Tactica:PrintError("Auto-Invite module not loaded.") end
       end
     end)
     add("Open Options", function() if Tactica and Tactica.ShowOptionsFrame then Tactica:ShowOptionsFrame() end end)
