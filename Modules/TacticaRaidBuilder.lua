@@ -108,7 +108,7 @@ local BuilderDefaults = {
   },
   ["Zul'Gurub"] = {
     size=20, tanks=2, healers=4, srs=2,
-    notes={ dispel=2, cleanse=2, decurse=2, tranq=0, purge=0, sheep=2, banish=0, shackle=0, sleep=0, fear=2 }
+    notes={ dispel=2, cleanse=2, decurse=4, tranq=0, purge=0, sheep=2, banish=0, shackle=0, sleep=0, fear=2 }
   },
   ["Ruins of Ahn'Qiraj"] = {
     size=20, tanks=2, healers=4, srs=1,

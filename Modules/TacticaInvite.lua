@@ -35,6 +35,8 @@ INV._gearPending   = {}
 INV._sessionIgnores = {}
 function TacticaInvite.ResetSessionIgnores()
   for k in pairs(INV._sessionIgnores) do INV._sessionIgnores[k] = nil end
+  -- also clean per-player gear prompts for a fresh session
+  INV.awaitingGear, INV._gearAsked, INV._gearAfterRole, INV._gearPending = {}, {}, {}, {}
 end
 
 -- confirm queue (+ de-dupe index)
@@ -42,6 +44,10 @@ INV._queue        = {}
 INV._enq          = {}
 INV._showing      = nil
 INV._confirm      = nil
+
+-- raid conversion intent + reinvite buffer
+INV._convertWhenFirstJoins = false
+INV._pendingReinvites = {}  -- name(lower) -> {name, role, doAssign, skipCapacity}
 
 -- UI
 INV.frame         = nil
@@ -80,6 +86,8 @@ if not INV._tick then
   end)
 end
 
+-- === Raid conversion helpers ===
+
 local function IsNameInRaid(name)
   local n = (GetNumRaidMembers and GetNumRaidMembers()) or 0
   for i=1,n do
@@ -87,6 +95,39 @@ local function IsNameInRaid(name)
     if nm and nm == name then return true end
   end
   return false
+end
+
+local function TryConvertToRaid(reason, retries)
+  retries = retries or 10
+  if not INV._convertWhenFirstJoins then return end
+
+  local raidN  = (GetNumRaidMembers  and GetNumRaidMembers()  or 0)
+  local partyN = (GetNumPartyMembers and GetNumPartyMembers() or 0)
+
+  if raidN > 0 then
+    INV._convertWhenFirstJoins = false
+    return
+  end
+
+  -- If not even in a party yet, wait a bit (solo cannot convert directly)
+  if partyN == 0 then
+    if retries > 0 then
+      After(0.5, function() TryConvertToRaid("waiting-party:"..tostring(reason), retries-1) end)
+    end
+    return
+  end
+
+  local amLead = (IsPartyLeader and IsPartyLeader()) and true or false
+  if amLead and ConvertToRaid then
+    ConvertToRaid()
+    cfmsg("Auto-converting party to raid... ("..tostring(reason or "n/a")..")")
+    INV._convertWhenFirstJoins = false
+  else
+    -- not leader yet; keep trying briefly
+    if retries > 0 then
+      After(0.5, function() TryConvertToRaid("waiting-leader:"..tostring(reason), retries-1) end)
+    end
+  end
 end
 
 local function RB() return TacticaRaidBuilder end
@@ -109,14 +150,13 @@ end
 
 -- tokens and knowledge
 local PURE_DPS = { hunter=true, mage=true, rogue=true, warlock=true }
-local AMBIG    = { warrior=true, druid=true, priest=true, paladin=true, shaman=true }
 
 local ROLE_KEY = {
   tank="TANK", tanks="TANK", prot="TANK", protection="TANK", shield="TANK", bear="TANK", furyprot="TANK",
   heal="HEALER", healer="HEALER", heals="HEALER", resto="HEALER", holy="HEALER", disc="HEALER", discipline="HEALER",
   dps="DPS", dd="DPS", damage="DPS", fury="DPS", arms="DPS", enh="DPS", enhancement="DPS", elemental="DPS", ele="DPS",
   balance="DPS", boomkin="DPS", moonkin="DPS", shadow="DPS", sp="DPS", cat="DPS", feral="DPS", mm="DPS", marks="DPS", marksmanship="DPS", survival="DPS", bm="DPS", sv="DPS",
-  combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps"
+  combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps", rdps="dps", mdps="dps"
 }
 
 local CLASS_KEY = {
@@ -154,7 +194,6 @@ end
 local function detectRoleAndClass(tokens)
   local roleFound, classFound = nil, nil
   local n = table.getn(tokens)
-  local i
   for i=1,n do
     local w = tokens[i]
     if not roleFound then
@@ -193,7 +232,6 @@ end
 local function RoleLettersToPrompt(list)
   local labels = { T="tank", H="healer", D="dps" }
   local out = {}
-  local i
   for i=1,table.getn(list) do
     local r = list[i]
     table.insert(out, labels[r] or r)
@@ -204,10 +242,8 @@ end
 local function IntersectOffered(offered, allowed)
   if not offered or table.getn(offered)==0 then return allowed end
   local setAllowed = {}
-  local i
   for i=1,table.getn(allowed) do setAllowed[allowed[i]] = true end
   local final = {}
-  local j
   for j=1,table.getn(offered) do if setAllowed[offered[j]] then table.insert(final, offered[j]) end end
   if table.getn(final)==0 then return allowed end
   return final
@@ -220,7 +256,6 @@ local rbHasRoom
 local function FilterByCapacity(letters)
   if not letters or table.getn(letters) == 0 then return letters end
   local out = {}
-  local i
   for i=1,table.getn(letters) do
     local r = letters[i]
     local role = LETTER2ROLE[r]
@@ -240,16 +275,15 @@ local function ParseRoleHints(raw)
   pos["T"] = firstpos("%f[%a]tank%w*%f[%A]") or firstpos("%f[%a]prot%w*%f[%A]") or firstpos("%f[%a]bear%f[%A]")
   pos["H"] = firstpos("%f[%a]heal%w*%f[%A]") or firstpos("%f[%a]resto%f[%A]") or firstpos("%f[%a]holy%f[%A]") or firstpos("%f[%a]disc%f[%A]") or firstpos("%f[%a]discipline%f[%A]")
   pos["D"] = firstpos("%f[%a]dps%f[%A]") or firstpos("%f[%a]dd%f[%A]") or firstpos("%f[%a]damage%f[%A]")
-              or firstpos("%f[%a]arms%f[%A]") or firstpos("%f[%a]fury%f[%A]") or firstpos("%f[%a]enh%w*%f[%A]")
-              or firstpos("%f[%a]elemental%f[%A]") or firstpos("%f[%a]balance%f[%A]") or firstpos("%f[%a]shadow%f[%A]")
-              or firstpos("%f[%a]cat%f[%A]") or firstpos("%f[%a]ret%f[%A]") or firstpos("%f[%a]boomkin%f[%A]")
+           or firstpos("%f[%a]arms%f[%A]") or firstpos("%f[%a]fury%f[%A]") or firstpos("%f[%a]enh%w*%f[%A]")
+           or firstpos("%f[%a]elemental%f[%A]") or firstpos("%f[%a]balance%f[%A]") or firstpos("%f[%a]shadow%f[%A]")
+           or firstpos("%f[%a]cat%f[%A]") or firstpos("%f[%a]ret%f[%A]") or firstpos("%f[%a]boomkin%f[%A]")
   local list = {}
   if pos["T"] then table.insert(list,{k="T",p=pos["T"]}) end
   if pos["H"] then table.insert(list,{k="H",p=pos["H"]}) end
   if pos["D"] then table.insert(list,{k="D",p=pos["D"]}) end
   table.sort(list, function(a,b) return a.p < b.p end)
   local out = {}
-  local i
   for i=1,table.getn(list) do table.insert(out, list[i].k) end
   return out
 end
@@ -299,7 +333,6 @@ rbHasRoom = function(role)
 
   local present = {}
   local total = (GetNumRaidMembers and GetNumRaidMembers()) or 0
-  local i
   for i=1,total do local nm = GetRaidRosterInfo(i); if nm and nm~="" then present[nm]=true end end
 
   local T = (TacticaDB and TacticaDB.Tanks)   or {}
@@ -307,7 +340,6 @@ rbHasRoom = function(role)
   local D = (TacticaDB and TacticaDB.DPS)     or {}
 
   local ct,ch,cd = 0,0,0
-  local nm
   for nm,_ in pairs(present) do
     if     T[nm] then ct=ct+1
     elseif H[nm] then ch=ch+1
@@ -339,7 +371,6 @@ end
 local function GetAssignedCounts()
   local present = {}
   local total = (GetNumRaidMembers and GetNumRaidMembers()) or 0
-  local i
   for i=1,total do local nm = GetRaidRosterInfo(i); if nm and nm~="" then present[nm]=true end end
 
   local T = (TacticaDB and TacticaDB.Tanks)   or {}
@@ -347,7 +378,6 @@ local function GetAssignedCounts()
   local D = (TacticaDB and TacticaDB.DPS)     or {}
 
   local ct,ch,cd = 0,0,0
-  local nm
   for nm,_ in pairs(present) do
     if     T[nm] then ct=ct+1
     elseif H[nm] then ch=ch+1
@@ -371,7 +401,6 @@ local function PickBestRole(offeredLetters)
   }
 
   local hasT, hasH, hasD = false, false, false
-  local i
   for i=1,table.getn(offeredLetters) do
     hasT = hasT or offeredLetters[i]=="T"
     hasH = hasH or offeredLetters[i]=="H"
@@ -383,7 +412,6 @@ local function PickBestRole(offeredLetters)
   end
 
   local best, bestRatio, bestMissing
-  local j
   for j=1,table.getn(offeredLetters) do
     local r = offeredLetters[j]
     if (r == "T" or r == "H") or (not hasT and not hasH) then
@@ -397,15 +425,58 @@ local function PickBestRole(offeredLetters)
   return best or offeredLetters[1]
 end
 
--- invite
-local function inviteByName(name) if InviteByName then InviteByName(name) end end
+-- invite helpers
+local function inviteByName(name)
+  if InviteByName then InviteByName(name) end
+end
+
+local function ScheduleReinvite(name, role, doAssign, skipCapacity)
+  INV._pendingReinvites[lower(name)] = { name=name, role=role, doAssign=doAssign, skipCapacity=skipCapacity and true or false }
+end
+
+-- Centralized conversion intent: try to become a raid if not already one
+local function EnsureRaidMode(reason)
+  local inRaid  = (GetNumRaidMembers  and GetNumRaidMembers()  or 0) > 0
+  if inRaid then return true end
+  INV._convertWhenFirstJoins = true
+  TryConvertToRaid(reason or "ensure", 10)
+  return false
+end
 
 local function inviteAndMaybeAssign(name, role, doAssign, skipCapacity)
+  -- Capacity (RB) guard
   if role and (not skipCapacity) and not rbHasRoom(role) then
     say(name, "[Tactica]: Thanks! We are currently full on "..string.lower(role)..".")
     return
   end
+
+  local raidN  = (GetNumRaidMembers  and GetNumRaidMembers()  or 0)
+  local partyN = (GetNumPartyMembers and GetNumPartyMembers() or 0)
+  local amLead = (IsPartyLeader and IsPartyLeader()) and true or false
+  local inRaid = raidN > 0
+
+  -- If not in a raid and party is full, convert first and retry invite after conversion
+  if (not inRaid) and partyN >= 4 then
+    if amLead and ConvertToRaid then
+      cfmsg("Party is full; converting to raid before inviting "..name.."...")
+      ScheduleReinvite(name, role, doAssign, skipCapacity)
+      INV._convertWhenFirstJoins = true
+      TryConvertToRaid("party-full", 10)
+      return
+    else
+      cfmsg("Party is full and you're not the leader — can't auto-convert. Ask the leader to convert to a raid.")
+      return
+    end
+  end
+
+  -- Try to ensure (or will become) a raid
+  if not inRaid then
+    EnsureRaidMode("pre-invite")
+  end
+
+  -- Proceed with invite now
   inviteByName(name)
+
   if doAssign and role then
     INV.pendingRoles[name] = role
     say(name, "[Tactica]: Invited. I will mark your role once you join.")
@@ -414,6 +485,7 @@ local function inviteAndMaybeAssign(name, role, doAssign, skipCapacity)
   end
 end
 
+-- confirm queue
 local function QueuePush(name, role, classHint, offered, rbMode)
   local key = lower(name or "")
   if INV._showing and lower(INV._showing.name) == key then
@@ -456,7 +528,6 @@ end
 -- intent filter for RB confirm mode
 local INVITE_WORDS = { invite=true, inv=true, ["+"]=true, inviteme=true, invpls=true, invplz=true }
 local function hasIntent(tokens)
-  local i
   for i=1,table.getn(tokens) do
     local w = tokens[i]
     if INVITE_WORDS[w] or ROLE_KEY[w] or CLASS_KEY[w] or SPEC2CLASS[w] then return true end
@@ -480,30 +551,24 @@ end
 
 local function GearLabelOnly(n)
   local line = GearLine(n) or ""
-
-  -- First try the UTF-8 en dash “–” (U+2013)
   local label = string.match(line, "^%s*%d+%s*–%s*(.+)$")
   if label then return label end
-
-  -- Fallback to ASCII hyphen “-”
   label = string.match(line, "^%s*%d+%s*%-%s*(.+)$")
   if label then return label end
-
   return ""
 end
 
 local function StartGearcheck(name)
   if not INV.rbGearEnabled or INV.rbGearThreshold == nil then return false end
   if INV._gearAsked[name] then return true end
+
+  INV._gearAsked[name] = true
   local intro = "[Tactica]: Gearcheck – please grade your gear from 0 to 5 using the gear scale below. Reply with a single number (e.g. '2') or a range (e.g. '2-3'). Ranges use the average (e.g. '1-3' = 2; '1-2' = 1)."
-  local i
   say(name, intro)
   for i=0,5 do
-    local ii = i
-    After(0.2 + ii*0.2, function() say(name, "[Tactica]: " .. GearLine(ii)) end)
+    say(name, "[Tactica]: " .. GearLine(i))
   end
   INV.awaitingGear[name] = now() + AWAIT_GEAR_SEC
-  INV._gearAsked[name] = true
   return true
 end
 
@@ -562,7 +627,6 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
   local hit = false
   if rbMode then
     if kw ~= "" and kw ~= "+" then
-      local i
       for i=1,table.getn(tokens) do if tokens[i]==lower(kw) then hit=true; break end end
     elseif kw == "+" then
       if string.find(raw, "%+") then hit=true end
@@ -571,7 +635,6 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
     end
   else
     if kw ~= "" and kw ~= "+" then
-      local j
       for j=1,table.getn(tokens) do if tokens[j]==lower(kw) then hit=true; break end end
     elseif kw == "+" then
       if string.find(raw, "%+") then hit=true end
@@ -661,11 +724,11 @@ local function handleRBConfirmGearOnly(author, msg)
   local tokens, _ = tokenize(msg)
   if not hasIntent(tokens) then return end
   if not (INV.rbGearEnabled and (INV.rbGearThreshold ~= nil)) then return end
-  -- Ask for gear and queue for popup without role info
   INV._gearPending[author] = { act="queue", role=nil, class=nil, offered=nil, rb=true, doAssign=false, skipCapacity=true }
   StartGearcheck(author)
 end
-function handleRBConfirmAsk(author, msg)
+
+local function handleRBConfirmAsk(author, msg)
   if IsNameInRaid(author) then return end
   if INV._sessionIgnores[lower(author)] then return end
 
@@ -829,8 +892,6 @@ function INV.ShowConfirm(name, role, classHint, offeredLetters, rbMode)
     if p.btnAssign then p.btnAssign:Show() end
   end
 
-
-  -- helper: letters -> nice English list ("Tank or Healer", "Tank, Healer or DPS")
   local function LettersToWords(list)
     local label = { T="Tank", H="Healer", D="DPS" }
     if not list or table.getn(list)==0 then return "Role" end
@@ -872,25 +933,19 @@ function INV.ShowConfirm(name, role, classHint, offeredLetters, rbMode)
   end
 
   -- gear info line (RB Mode)
-	if rbMode and INV.rbGearEnabled and (INV.rbGearThreshold ~= nil) then
-	  local rating = INV._gearRatings and INV._gearRatings[name]
-	  local gearLine
-	  if rating == nil then
-		gearLine = "Gear: Not checked."
-	  else
-		local lbl = GearLabelOnly(rating)
-		if lbl ~= "" then
-		  gearLine = "Gear: " .. tostring(rating) .. " – " .. lbl .. "."
-		else
-		  -- graceful fallback (no dangling dash)
-		  gearLine = "Gear: " .. tostring(rating) .. "."
-		end
-	  end
-	  p.bot:SetText(p.bot:GetText() .. "\n" .. gearLine)
-	end
+  if rbMode and INV.rbGearEnabled and (INV.rbGearThreshold ~= nil) then
+    local rating = INV._gearRatings and INV._gearRatings[name]
+    local gearLine
+    if rating == nil then
+      gearLine = "Gear: Not checked."
+    else
+      local lbl = GearLabelOnly(rating)
+      if lbl ~= "" then gearLine = "Gear: " .. tostring(rating) .. " – " .. lbl .. "."
+      else gearLine = "Gear: " .. tostring(rating) .. "." end
+    end
+    p.bot:SetText(p.bot:GetText() .. "\n" .. gearLine)
+  end
 
-
-  -- build dynamic role bar if needed
   p.BuildRoleButtons(offeredLetters, function(letterPicked)
     local rolePicked = LETTER2ROLE[letterPicked]
     inviteAndMaybeAssign(name, rolePicked, true)
@@ -961,7 +1016,7 @@ local function onWhisperReply(author, msg)
   local gUntil = INV.awaitingGear[author]
   if gUntil and now() <= gUntil then
     local val = ParseGearReply(msg)
-	INV._gearRatings[author] = val
+    INV._gearRatings[author] = val
     if val == nil then
       say(author, "[Tactica]: Please reply with a number 0-5, or a range like '2-3', using the gear scale above.")
       INV.awaitingGear[author] = now() + AWAIT_GEAR_SEC
@@ -1110,6 +1165,8 @@ INV._evt = CreateFrame("Frame")
 INV._evt:RegisterEvent("CHAT_MSG_WHISPER")
 INV._evt:RegisterEvent("RAID_ROSTER_UPDATE")
 INV._evt:RegisterEvent("ADDON_LOADED")
+INV._evt:RegisterEvent("PARTY_MEMBERS_CHANGED")
+INV._evt:RegisterEvent("PARTY_LEADER_CHANGED")
 INV._evt:SetScript("OnEvent", function()
   if event == "ADDON_LOADED" and arg1 == "Tactica" then
     return
@@ -1120,7 +1177,21 @@ INV._evt:SetScript("OnEvent", function()
     if onWhisperReply(author, msg) then return end
     onWhisper(author, msg)
 
+  elseif event == "PARTY_MEMBERS_CHANGED" or event == "PARTY_LEADER_CHANGED" then
+    TryConvertToRaid("roster-event", 6)
+
   elseif event == "RAID_ROSTER_UPDATE" then
+    -- If we've become a raid, clear the flag and flush pending reinvites
+    if (GetNumRaidMembers and (GetNumRaidMembers() or 0) > 0) then
+      INV._convertWhenFirstJoins = false
+      -- process any invites we held while converting
+      local reinv = INV._pendingReinvites
+      INV._pendingReinvites = {}
+      for _,pend in pairs(reinv) do
+        inviteAndMaybeAssign(pend.name, pend.role, pend.doAssign, pend.skipCapacity)
+      end
+    end
+
     local inRaid = {}
     local n = (GetNumRaidMembers and GetNumRaidMembers()) or 0
     for i=1,n do local nm = GetRaidRosterInfo(i); if nm and nm~="" then inRaid[nm]=true end end
