@@ -1,6 +1,6 @@
 # Tactica
-## Post tactics, build raids, set loot rules & assign roles, synced!
-Tactical addon for raid leading with ease — post ~90 clear boss strategies (or add your own), build raids (LFM creator/poster), assign & sync roles in raid roster, and smooth out loot mode changes, all in one place.
+## Auto-build raids (invite/gearcheck), post tactics, set loot rules & assign roles - synced!
+Tactical addon for raid leading with ease — post ~90 clear boss strategies (or add your own), auto-build raids (LFM creator/poster with auto-invite/auto-gearcheck/auto-assign), assign & sync roles in raid roster, and smooth out loot mode changes, all in one place.
 
 _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" height="15" alt="Tactica-Icon" src="https://github.com/user-attachments/assets/0e7b9ac6-d5c4-4f7e-b944-9fc8f96ec73b" />).
 
@@ -30,9 +30,11 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 - Choose number of SR (Soft Reserves), HR (Hard Reserves), Tanks, Healers, and whether you can Summon.
 - Select Yell, LFG or/and World to post in - set optional "Auto-announce".
 - Syncs with raid roster, so when you assign a role - the LFM announcement will adjust accordingly.
+- Auto-invite/auto-assign/auto-gearcheck, all built-in to ease the pain.
 - `/tt build` for the LFM/raid builder UI.
 - `/tt lfm` posts once using your current Builder settings and respects a 30s cooldown (shared with the “Announce” button).
-<img width="589" height="521" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/5259a1c7-722b-46d0-8b51-6fa4d1e375ad" />
+- `/tt autoinvite` or `/ttai` for standalone auto-invite frame, with auto-assign roles functionality.
+<img width="595" height="665" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/3e04ce83-9fb9-4cf2-a017-8fd88e8cdcb3" />
 
 ### 4. Loot mode QoL for bosses
 - Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). (same as the checkbox in **/tt options**).
