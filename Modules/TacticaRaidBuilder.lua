@@ -65,7 +65,8 @@ local function RB_SnapshotForPreset()
     chLFG     = RB.state.chLFG   and true or false,
     chYell    = RB.state.chYell  and true or false,
     interval  = RB.state.interval,
-	gearScale = RB.state.gearScale,
+    gearScale = RB.state.gearScale,
+    autoGear  = RB.state.autoGear and true or false,
   }
 end
 
@@ -284,7 +285,7 @@ RB.state = RB.state or {
   hr="", free="", canSum=false, hideNeed=false,
   chWorld=false, chLFG=false, chYell=false,
   auto=false, interval=120, running=false,
-  gearScale=nil, autoGear=false
+  gearScale=nil, autoGear=false,
 }
 RB.frame = RB.frame or nil
 RB.ddRaid, RB.ddWBoss, RB.ddESMode, RB.ddSize = nil, nil, nil, nil
@@ -353,36 +354,36 @@ RB._roleSig = ""
 RB._rolesWatch = RB._rolesWatch or CreateFrame("Frame")
 do
   local accum = 0
-	RB._rolesWatch:SetScript("OnUpdate", function(_, elapsed)
-	  accum = (accum or 0) + (elapsed or 0)
-	  if accum < 0.5 then return end
-	  accum = 0
+  RB._rolesWatch:SetScript("OnUpdate", function(_, elapsed)
+    accum = (accum or 0) + (elapsed or 0)
+    if accum < 0.5 then return end
+    accum = 0
 
-	  local rosterSet = RB_RaidRosterSet()
-	  local excl = RB._exclude or {}
+    local rosterSet = RB_RaidRosterSet()
+    local excl = RB._exclude or {}
 
-	  local T = (TacticaDB and TacticaDB.Tanks) or {}
-	  local H = (TacticaDB and TacticaDB.Healers) or {}
-	  local D = (TacticaDB and TacticaDB.DPS) or {}
+    local T = (TacticaDB and TacticaDB.Tanks) or {}
+    local H = (TacticaDB and TacticaDB.Healers) or {}
+    local D = (TacticaDB and TacticaDB.DPS) or {}
 
-	  local ct, ch, cd = 0,0,0
-	  local name
-	  for name,_ in pairs(rosterSet) do
-		if not excl[name] then
-		  if     T[name] then ct=ct+1
-		  elseif H[name] then ch=ch+1
-		  elseif D[name] then cd=cd+1
-		  end
-		end
-	  end
+    local ct, ch, cd = 0,0,0
+    local name
+    for name,_ in pairs(rosterSet) do
+      if not excl[name] then
+        if     T[name] then ct=ct+1
+        elseif H[name] then ch=ch+1
+        elseif D[name] then cd=cd+1
+        end
+      end
+    end
 
-	  local sig = ct..":"..ch..":"..cd
-	  if sig ~= RB._roleSig then
-		RB._roleSig = sig
-		RB._dirty = true
-		RB.RefreshPreview()
-	  end
-	end)
+    local sig = ct..":"..ch..":"..cd
+    if sig ~= RB._roleSig then
+      RB._roleSig = sig
+      RB._dirty = true
+      RB.RefreshPreview()
+    end
+  end)
 end
 
 -------------------------------------------------
@@ -761,6 +762,12 @@ local function RB_AutoInviteUpdateFromUI()
   end
 end
 
+local function RB_SyncInviteExtras()
+  if TacticaInvite and TacticaInvite.SetGearcheckFromRB then
+    TacticaInvite.SetGearcheckFromRB(RB.state.autoGear and true or false, RB.state.gearScale)
+  end
+end
+
 -------------------------------------------------
 -- Dropdowns
 -------------------------------------------------
@@ -818,7 +825,7 @@ function RB.InitRaidDropdown()
         UIDropDownMenu_SetText("0 SR", RB.ddSRs)
         RB.SaveState(); RB.RefreshPreview(); CloseDropDownMenus()
         RB.InitSizeDropdown()
-		RB.InitGearScaleDropdown()
+        RB.InitGearScaleDropdown()
       end
       UIDropDownMenu_AddButton(info)
     end
@@ -850,7 +857,7 @@ function RB.InitWBossDropdown()
         UIDropDownMenu_SetSelectedValue(RB.ddWBoss, picked)
         UIDropDownMenu_SetText(picked, RB.ddWBoss)
         RB.SaveState(); RB.RefreshPreview(); CloseDropDownMenus()
-		RB.InitGearScaleDropdown()
+        RB.InitGearScaleDropdown()
       end
       UIDropDownMenu_AddButton(info)
     end
@@ -885,7 +892,7 @@ function RB.InitESModeDropdown()
           UIDropDownMenu_SetText(RB.state.srs     .. " SR",      RB.ddSRs)
         end
         RB.SaveState(); RB.RefreshPreview(); CloseDropDownMenus()
-		RB.InitGearScaleDropdown()
+        RB.InitGearScaleDropdown()
       end
       UIDropDownMenu_AddButton(info)
     end
@@ -973,8 +980,17 @@ local function RB_CheckAndStopIfFull()
   local target = RB.state.size
   if not target or target <= 0 then return false end
 
-  local inRaid = GetNumRaidMembers and GetNumRaidMembers() or 0
-  if inRaid >= target then
+  local needM = 0
+  do
+    local headNeed = BuildNeedString(RB.state.size, RB.state.tanks, RB.state.healers, RB.state.hideNeed)
+    if type(headNeed) == "table" then
+      needM = headNeed[1] or 0
+    else
+      needM = headNeed or 0
+    end
+  end
+
+  if needM <= 0 then
     RB.state.running = false
     RB.state.auto    = false
     RB._warnOk       = false
@@ -982,7 +998,8 @@ local function RB_CheckAndStopIfFull()
     if RB.cbAuto then RB.cbAuto:SetChecked(false) end
     RB.SaveState()
     RB.UpdateButtonsForRunning()
-    RB_Print("|cff33ff99[Tactica]:|r Auto-announce disabled: raid is full ("..inRaid.."/"..target.."). Assign roles in the Raid Roster for accuracy.")
+    local inRaid = RB_RaidCount()
+    RB_Print("|cff33ff99[Tactica]:|r Auto-announce disabled: raid is full ("..inRaid.."/"..(target or "?")..") based on current needs. Assign roles in the Raid Roster for accuracy.")
     return true
   end
   return false
@@ -1257,6 +1274,7 @@ local function OnClearClick()
   RB.editHR:SetText(RB.state.hr or "")
   RB.editFree:SetText(RB.state.free or "")
   RB.RefreshPreview()
+  RB_SyncInviteExtras()
 end
 
 -------------------------------------------------
@@ -1287,12 +1305,12 @@ local function OpenRaidPanel()
 end
 
 function RB.Open()
-  if RB.frame then RB.frame:Show(); ApplyLockIcon(); RB.RefreshPreview(); return end
+  if RB.frame then RB.frame:Show(); ApplyLockIcon(); RB.RefreshPreview(); RB_SyncInviteExtras(); return end
   RB.ApplySaved()
 
   local f = CreateFrame("Frame", "TacticaRaidBuilderFrame", UIParent)
   RB.frame = f
-  f:SetWidth(480); f:SetHeight(535)
+  f:SetWidth(480); f:SetHeight(530)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   f:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -1310,9 +1328,7 @@ function RB.Open()
   f:SetScript("OnHide", function()
     RB.state.running=false; RB._warnOk=false; RB._nextSend=nil; RB.UpdateButtonsForRunning()
     if TacticaInvite and TacticaInvite.ResetSessionIgnores then TacticaInvite.ResetSessionIgnores() end
-	if TacticaInvite and TacticaInvite.SetGearcheckFromRB then
-		TacticaInvite.SetGearcheckFromRB(false, nil)
-	end
+    RB_SyncInviteExtras()
   end)
 
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1455,16 +1471,16 @@ function RB.Open()
   RB.editPresetName:SetScript("OnEnterPressed", function() RB.btnPresetAction:Click() end)
   RB.editPresetName:SetScript("OnEscapePressed", function() this:ClearFocus() end)
 
-	-- Section 1 title (green, bold, smaller than window title)
-	RB.titleRaid = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	RB.titleRaid:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -75)  -- 20px above the line
-	RB.titleRaid:SetText("|cff33ff99RAID SETUP|r")
+  -- Section 1 title (green)
+  RB.titleRaid = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  RB.titleRaid:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -75)
+  RB.titleRaid:SetText("|cff33ff99RAID SETUP|r")
 
-	local sep1 = f:CreateTexture(nil, "ARTWORK")
-	sep1:SetHeight(1)
-	sep1:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -90)  -- moved down 30 (was -65)
-	sep1:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -90)
-	sep1:SetTexture(1,1,1); if sep1.SetVertexColor then sep1:SetVertexColor(1,1,1,0.25) end
+  local sep1 = f:CreateTexture(nil, "ARTWORK")
+  sep1:SetHeight(1)
+  sep1:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -90)
+  sep1:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -90)
+  sep1:SetTexture(1,1,1); if sep1.SetVertexColor then sep1:SetVertexColor(1,1,1,0.25) end
 
   local lblRaid = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   lblRaid:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -101); lblRaid:SetText("Raid:")
@@ -1482,7 +1498,7 @@ function RB.Open()
   lblSize:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -135); lblSize:SetText("Size:")
 
   RB.ddSize = CreateFrame("Frame", "TacticaRBSize", f, "UIDropDownMenuTemplate")
-  
+
   -- Custom Size edit (hidden by default)
   RB.editCustomSize = CreateFrame("EditBox", "TacticaRBCustomSize", f, "InputBoxTemplate")
   RB.editCustomSize:SetPoint("LEFT", RB.ddSize, "RIGHT", 85, 3)
@@ -1490,23 +1506,23 @@ function RB.Open()
   if RB.editCustomSize.SetNumeric then RB.editCustomSize:SetNumeric(true) end
   RB.editCustomSize:Hide()
   RB.editCustomSize:SetScript("OnEscapePressed", function() this:ClearFocus(); this:Hide() end)
-	RB.editCustomSize:SetScript("OnEnterPressed", function()
-	  local txt = this:GetText() or ""
-	  local n = tonumber(txt)
-	  if n then
-		if n < 2 then n = 2 end; if n > 40 then n = 40 end
-		RB.state.size = n; RB.state.size_selected = true
-		local d = ComputeDefaults(RB.state.raid, RB.state.size, RB.state.esMode)
-		RB.state.tanks, RB.state.healers, RB.state.srs = d.tanks, d.healers, d.srs
-		UIDropDownMenu_SetSelectedValue(RB.ddSize, "custom")
-		UIDropDownMenu_SetText(tostring(RB.state.size), RB.ddSize)
-		UIDropDownMenu_SetText(RB.state.tanks .. " Tanks", RB.ddTanks)
-		UIDropDownMenu_SetText(RB.state.healers .. " Healers", RB.ddHealers)
-		UIDropDownMenu_SetText(RB.state.srs .. " SR", RB.ddSRs)
-		RB.SaveState(); RB.RefreshPreview(); this:Hide(); this:ClearFocus()
-	  end
-	end)
-RB.ddSize:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -129); RB.ddSize:SetWidth(90)
+  RB.editCustomSize:SetScript("OnEnterPressed", function()
+    local txt = this:GetText() or ""
+    local n = tonumber(txt)
+    if n then
+      if n < 2 then n = 2 end; if n > 40 then n = 40 end
+      RB.state.size = n; RB.state.size_selected = true
+      local d = ComputeDefaults(RB.state.raid, RB.state.size, RB.state.esMode)
+      RB.state.tanks, RB.state.healers, RB.state.srs = d.tanks, d.healers, d.srs
+      UIDropDownMenu_SetSelectedValue(RB.ddSize, "custom")
+      UIDropDownMenu_SetText(tostring(RB.state.size), RB.ddSize)
+      UIDropDownMenu_SetText(RB.state.tanks .. " Tanks", RB.ddTanks)
+      UIDropDownMenu_SetText(RB.state.healers .. " Healers", RB.ddHealers)
+      UIDropDownMenu_SetText(RB.state.srs .. " SR", RB.ddSRs)
+      RB.SaveState(); RB.RefreshPreview(); this:Hide(); this:ClearFocus()
+    end
+  end)
+  RB.ddSize:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -129); RB.ddSize:SetWidth(90)
 
   local lblT = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   lblT:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -167); lblT:SetText("Tanks:")
@@ -1544,15 +1560,15 @@ RB.ddSize:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -129); RB.ddSize:SetWidth(90)
   RB.editFree:SetMaxLetters(65); RB.editFree:SetText(RB.state.free or "")
   RB.editFree:SetScript("OnTextChanged", OnEditFreeChanged)
 
-	RB.titleAnn = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	RB.titleAnn:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -260)  -- 20px above the line
-	RB.titleAnn:SetText("|cff33ff99ANNOUNCEMENT SETUP|r")
+  RB.titleAnn = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  RB.titleAnn:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -260)
+  RB.titleAnn:SetText("|cff33ff99ANNOUNCEMENT SETUP|r")
 
-	local sep2 = f:CreateTexture(nil, "ARTWORK")
-	sep2:SetHeight(1)
-	sep2:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -275)  -- was -225; now -225 -30 (prev shift) -30 (its own title) = -285
-	sep2:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -275)
-	sep2:SetTexture(1,1,1); if sep2.SetVertexColor then sep2:SetVertexColor(1,1,1,0.25) end
+  local sep2 = f:CreateTexture(nil, "ARTWORK")
+  sep2:SetHeight(1)
+  sep2:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -275)
+  sep2:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -275)
+  sep2:SetTexture(1,1,1); if sep2.SetVertexColor then sep2:SetVertexColor(1,1,1,0.25) end
 
   RB.cbCanSum = CreateFrame("CheckButton", "TacticaRBCanSum", f, "UICheckButtonTemplate")
   RB.cbCanSum:SetWidth(20); RB.cbCanSum:SetHeight(20); RB.cbCanSum:SetPoint("LEFT", RB.editFree, "RIGHT", 15, 0)
@@ -1612,15 +1628,15 @@ RB.ddSize:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -129); RB.ddSize:SetWidth(90)
   RB.lblInt:SetWidth(450); RB.lblInt:SetJustifyH("LEFT"); RB.lblInt:SetText("")
   RB.lblInt:SetText("|cffffd100Auto Interval (min)|r")
 
-RB.titleInvite = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-RB.titleInvite:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -315)
-RB.titleInvite:SetText("|cff33ff99INVITE & GEAR SETUP|r")
+  RB.titleInvite = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  RB.titleInvite:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -315)
+  RB.titleInvite:SetText("|cff33ff99INVITE & GEAR SETUP|r")
 
-local sep3 = f:CreateTexture(nil, "ARTWORK")
-sep3:SetHeight(1)
-sep3:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -330)
-sep3:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -330)
-sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.25) end
+  local sep3 = f:CreateTexture(nil, "ARTWORK")
+  sep3:SetHeight(1)
+  sep3:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -330)
+  sep3:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -330)
+  sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.25) end
 
   -- Auto role assignment checkbox (RB-side)
   RB.cbRoleAssign = CreateFrame("CheckButton", "TacticaRBRoleAssign", f, "UICheckButtonTemplate")
@@ -1629,15 +1645,15 @@ sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.
   getglobal("TacticaRBRoleAssignText"):SetText("Auto-Assign")
   RB.cbRoleAssign:SetChecked(false)
   RB.cbRoleAssign:SetScript("OnClick", function() RB_AutoInviteUpdateFromUI() end)
-  
- -- Auto-Invite checkbox (no keyword, intent-based)
+
+  -- Auto-Invite checkbox (no keyword, intent-based)
   RB.cbAutoInvite = CreateFrame("CheckButton", "TacticaRBAutoInvite", f, "UICheckButtonTemplate")
   RB.cbAutoInvite:SetWidth(20); RB.cbAutoInvite:SetHeight(20)
   RB.cbAutoInvite:SetPoint("LEFT", RB.cbRoleAssign, "RIGHT", 70, 0)
   getglobal("TacticaRBAutoInviteText"):SetText("Auto-Invite")
   RB.cbAutoInvite:SetScript("OnClick", function() RB_AutoInviteUpdateFromUI() end)
-  
-    -- Gear Scale dropdown (right of Auto-Invite, same spacing as Auto->Interval)
+
+  -- Gear Scale dropdown (right of Auto-Invite)
   RB.ddGearScale = CreateFrame("Frame", "TacticaRBGearScale", f, "UIDropDownMenuTemplate")
   RB.ddGearScale:SetPoint("LEFT", RB.cbAutoInvite, "RIGHT", 60, -3)
   UIDropDownMenu_SetWidth(120, RB.ddGearScale)
@@ -1669,9 +1685,7 @@ sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.
           RB.state.gearScale = picked
           UIDropDownMenu_SetText("Scale "..picked, RB.ddGearScale)
           RB.SaveState()
-          if TacticaInvite and TacticaInvite.SetGearcheckFromRB then
-            TacticaInvite.SetGearcheckFromRB(RB.state.autoGear, RB.state.gearScale)
-          end
+          RB_SyncInviteExtras()
           CloseDropDownMenus()
         end
         UIDropDownMenu_AddButton(info)
@@ -1685,7 +1699,7 @@ sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.
   end
   RB.InitGearScaleDropdown()
 
-  -- Auto-Gearcheck checkbox + label (styled like Auto Interval label)
+  -- Auto-Gearcheck checkbox + label
   RB.cbGear = CreateFrame("CheckButton", "TacticaRBGear", f, "UICheckButtonTemplate")
   RB.cbGear:SetWidth(20); RB.cbGear:SetHeight(20)
   RB.cbGear:SetPoint("LEFT", RB.ddGearScale, "RIGHT", -13, 2)
@@ -1708,16 +1722,10 @@ sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.
     RB_Print("|cff33ff99[Tactica]:|r 5 – Kara40 / T3.5")
   end
 
-  local function SyncGearToInvite()
-    if TacticaInvite and TacticaInvite.SetGearcheckFromRB then
-      TacticaInvite.SetGearcheckFromRB(RB.state.autoGear and true or false, RB.state.gearScale)
-    end
-  end
-
   RB.cbGear:SetScript("OnClick", function()
     RB.state.autoGear = this:GetChecked() and true or false
     RB.SaveState()
-    SyncGearToInvite()
+    RB_SyncInviteExtras()
     if RB.state.autoGear then
       if RB.state.gearScale == nil then
         RB_Print("|cffff6666[Tactica]:|r Pick a Scale to use with Auto-Gearcheck.")
@@ -1728,11 +1736,11 @@ sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.
 
   -- Grey note explaining Auto-Assign vs Auto-Invite
   RB.lblAIExplain = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblAIExplain:SetPoint("BOTTOMLEFT", RB.cbRoleAssign, "BOTTOMLEFT", 0, -20)
+  RB.lblAIExplain:SetPoint("BOTTOMLEFT", RB.cbRoleAssign, "BOTTOMLEFT", 0, -17)
   RB.lblAIExplain:SetWidth(450); RB.lblAIExplain:SetJustifyH("LEFT")
   if RB.lblAIExplain.SetTextColor then RB.lblAIExplain:SetTextColor(0.7,0.7,0.7) end
   RB.lblAIExplain:SetText("Note: Auto-Assign will auto-set roles in raid roster. Auto-Invite will invite on intent.")
-
+  
   local sep4 = f:CreateTexture(nil, "ARTWORK")
   sep4:SetHeight(1)
   sep4:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -385)
@@ -1787,7 +1795,6 @@ sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.
   RB.btnExclude:SetText("Exclude List")
   RB.btnExclude:SetScript("OnClick", function() RB_OpenExcludeList() end)
 
-
   RB.btnClear = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   RB.btnClear:SetWidth(70); RB.btnClear:SetHeight(22)
   RB.btnClear:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -16, 15)
@@ -1821,9 +1828,7 @@ sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.
   RB.RefreshPreview()
   RB.UpdateButtonsForRunning()
   ApplyLockIcon()
-	if TacticaInvite and TacticaInvite.SetGearcheckFromRB then
-		TacticaInvite.SetGearcheckFromRB(RB.state.autoGear and true or false, RB.state.gearScale)
-	end
+  RB_SyncInviteExtras()
   f:Show()
 end
 
@@ -1855,9 +1860,11 @@ function RB.LoadPreset(name)
   RB.state.canSum      = p.canSum and true or false
   RB.state.hideNeed    = p.hideNeed and true or false
   RB.state.chWorld     = p.chWorld and true or false
-  RB.state.chLFG       = p.chLFG and true or false
-  RB.state.chYell      = p.chYell and true or false
+  RB.state.chLFG       = p.chLFG   and true or false
+  RB.state.chYell      = p.chYell  and true or false
   RB.state.interval    = (p.interval == 60 or p.interval == 120 or p.interval == 300) and p.interval or 120
+  RB.state.gearScale   = p.gearScale
+  RB.state.autoGear    = p.autoGear and true or false
 
   if RB.state.raid == "World Bosses" then RB.ddWBoss:Show(); RB.ddESMode:Hide()
   elseif RB.state.raid == "Emerald Sanctum" then RB.ddESMode:Show(); RB.ddWBoss:Hide()
@@ -1887,9 +1894,11 @@ function RB.LoadPreset(name)
   if RB.cbHideNeed then RB.cbHideNeed:SetChecked(RB.state.hideNeed) end
   if RB.editHR  then RB.editHR:SetText(RB.state.hr or "") end
   if RB.editFree then RB.editFree:SetText(RB.state.free or "") end
+  RB.InitGearScaleDropdown()
 
   RB.SaveState()
   RB.RefreshPreview()
+  RB_SyncInviteExtras()
   RB_Print("|cff33ff99[Tactica]:|r Preset loaded: |cffffff00"..name.."|r.")
 end
 
@@ -1953,7 +1962,7 @@ function RB_RefreshExcludeList()
     p.items[i] = { cb=cb, name=nm }
   end
   p.child:SetHeight(-y + 6)
-    if RB.excl and RB.excl.scroll and RB.excl.scroll.UpdateScrollChildRect then
+  if RB.excl and RB.excl.scroll and RB.excl.scroll.UpdateScrollChildRect then
     RB.excl.scroll:UpdateScrollChildRect()
   end
 end

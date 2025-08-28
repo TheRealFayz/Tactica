@@ -1,4 +1,4 @@
--- TacticaRaidBuilder.lua - Auto-invite/role assign/gearcheck for Turtle WoW
+-- TacticaInvite.lua - Auto-invite/role assign/gearcheck for Turtle WoW
 -- Created by Doite
 
 local INV = {}
@@ -15,9 +15,10 @@ INV.rbKeyword     = ""
 INV.rbAutoRoles   = false
 
 -- Gearcheck (RB-only)
-INV.rbGearEnabled   = false
-INV.rbGearThreshold = nil
-INV._gearRatings = INV._gearRatings or {}
+INV.rbGearEnabled     = false
+INV.rbGearThreshold   = nil
+INV._gearRatings      = INV._gearRatings or {}
+INV._gearTimeoutRemind= true   -- configurable via RB
 
 -- flow state
 INV.awaitingRole  = {}
@@ -148,15 +149,19 @@ function TacticaInvite.SetGearcheckFromRB(enabled, threshold)
   INV.rbGearThreshold = threshold
 end
 
+function TacticaInvite.SetGearTimeoutRemind(on)
+  INV._gearTimeoutRemind = on and true or false
+end
+
 -- tokens and knowledge
 local PURE_DPS = { hunter=true, mage=true, rogue=true, warlock=true }
 
 local ROLE_KEY = {
-  tank="TANK", tanks="TANK", prot="TANK", protection="TANK", shield="TANK", bear="TANK", furyprot="TANK",
+  tank="TANK", tanks="TANK", prot="TANK", protection="TANK", shield="TANK", bear="TANK", furyprot="TANK", ot="TANK", mt="TANK",
   heal="HEALER", healer="HEALER", heals="HEALER", resto="HEALER", holy="HEALER", disc="HEALER", discipline="HEALER",
   dps="DPS", dd="DPS", damage="DPS", fury="DPS", arms="DPS", enh="DPS", enhancement="DPS", elemental="DPS", ele="DPS",
   balance="DPS", boomkin="DPS", moonkin="DPS", shadow="DPS", sp="DPS", cat="DPS", feral="DPS", mm="DPS", marks="DPS", marksmanship="DPS", survival="DPS", bm="DPS", sv="DPS",
-  combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps", rdps="dps", mdps="dps"
+  combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps", rdps="dps", mdps="dps", boomi="dps", boomie="dps"
 }
 
 local CLASS_KEY = {
@@ -169,13 +174,13 @@ local SPEC2CLASS = {
   frost="mage", fire="mage", arcane="mage",
   shadow="priest", holy="priest", sp="priest",
   disc="priest", discipline="priest",
-  ret="paladin", retribution="paladin", prot="paladin", pal="paladin",
+  ret="paladin", retribution="paladin", prot="paladin", pal="paladin", pala="paladin",
   enhance="shaman", enhancement="shaman", elemental="shaman", ele="shaman", resto="shaman", restoration="shaman",
   feral="druid", balance="druid", boomkin="druid", bear="druid", cat="druid",
   aff="warlock", affliction="warlock", demo="warlock", demonology="warlock", destro="warlock", destruction="warlock", lock="warlock",
   mm="hunter", marks="hunter", marksmanship="hunter", survival="hunter", bm="hunter", hunt="hunter",
   combat="rogue", assassination="rogue", assassin="rogue", subtlety="rogue", sub="rogue",
-  fury="warrior", arms="warrior", war="warrior", protection="warrior"
+  fury="warrior", arms="warrior", war="warrior", warr="warrior", protection="warrior"
 }
 
 local ROLE_LET  = { TANK="T", HEALER="H", DPS="D" }
@@ -323,7 +328,7 @@ local function refreshRolesUI()
   if pfUI and pfUI.uf and pfUI.uf.raid and pfUI.uf.raid.Show then pfUI.uf.raid:Show() end
 end
 
--- RB capacity check
+-- RB capacity check (EXCLUDE-AWARE)
 rbHasRoom = function(role)
   local R = RB()
   if not (R and R.state and R.state.size) then return true end
@@ -331,9 +336,14 @@ rbHasRoom = function(role)
   local wantT = R.state.tanks or 0
   local wantH = R.state.healers or 0
 
+  local exclude = (R and R._exclude) or {}
+
   local present = {}
   local total = (GetNumRaidMembers and GetNumRaidMembers()) or 0
-  for i=1,total do local nm = GetRaidRosterInfo(i); if nm and nm~="" then present[nm]=true end end
+  for i=1,total do
+    local nm = GetRaidRosterInfo(i)
+    if nm and nm ~= "" and not exclude[nm] then present[nm] = true end
+  end
 
   local T = (TacticaDB and TacticaDB.Tanks)   or {}
   local H = (TacticaDB and TacticaDB.Healers) or {}
@@ -354,24 +364,27 @@ rbHasRoom = function(role)
   else return true end
 end
 
--- totals and counts
+-- Role targets from Raid Builder (totals aimed for)
 local function GetNeededTotals()
-  local R = RB()
-  if R and R.state and R.state.size then
-    local needT = R.state.tanks or 0
-    local needH = R.state.healers or 0
-    local size  = R.state.size or 0
-    local needD = size - needT - needH
-    if needD < 0 then needD = 0 end
-    return needT, needH, needD
-  end
-  return 3, 6, 31
+  local R = TacticaRaidBuilder
+  local size  = (R and R.state and R.state.size)    or 0
+  local wantT = (R and R.state and R.state.tanks)   or 0
+  local wantH = (R and R.state and R.state.healers) or 0
+  local dBudget = size - wantT - wantH
+  if dBudget < 0 then dBudget = 0 end
+  return wantT, wantH, dBudget
 end
 
+-- totals and counts (EXCLUDE-AWARE for PickBestRole)
 local function GetAssignedCounts()
+  local R = RB()
+  local exclude = (R and R._exclude) or {}
+
   local present = {}
   local total = (GetNumRaidMembers and GetNumRaidMembers()) or 0
-  for i=1,total do local nm = GetRaidRosterInfo(i); if nm and nm~="" then present[nm]=true end end
+  for i=1,total do
+    local nm = GetRaidRosterInfo(i); if nm and nm~="" and not exclude[nm] then present[nm]=true end
+  end
 
   local T = (TacticaDB and TacticaDB.Tanks)   or {}
   local H = (TacticaDB and TacticaDB.Healers) or {}
@@ -558,28 +571,38 @@ local function GearLabelOnly(n)
   return ""
 end
 
+-- fresh or stale-session-safe gear prompt
 local function StartGearcheck(name)
   if not INV.rbGearEnabled or INV.rbGearThreshold == nil then return false end
-  if INV._gearAsked[name] then return true end
+  local tNow = now()
+  local active = INV.awaitingGear[name] and (tNow <= INV.awaitingGear[name])
 
+  -- if currently active prompt exists, don't re-spam the entire scale
+  if INV._gearAsked[name] and active then
+    say(name, "[Tactica]: Please reply only with a number 0-5, or a range like '2-3'.")
+    return true
+  end
+
+  -- (re)start full prompt (handles stale session where _gearAsked was set but timer expired)
   INV._gearAsked[name] = true
-  local intro = "[Tactica]: Gearcheck – please grade your gear from 0 to 5 using the gear scale below. Reply with a single number (e.g. '2') or a range (e.g. '2-3'). Ranges use the average (e.g. '1-3' = 2; '1-2' = 1)."
+  local intro = "[Tactica]: Gearcheck – please grade the MAJORITY of your gear (9+/18 itemslots) using the scale below. Reply only with a single number (e.g. '2') or a range (e.g. '2-3')."
   say(name, intro)
   for i=0,5 do
     say(name, "[Tactica]: " .. GearLine(i))
   end
-  INV.awaitingGear[name] = now() + AWAIT_GEAR_SEC
+  INV.awaitingGear[name] = tNow + AWAIT_GEAR_SEC
   return true
 end
 
 local function ParseGearReply(msg)
   local s = trim(msg or "")
-  local a,b = string.match(s, "^(%d)%s*[-–]%s*(%d)$")
+
+  -- Range like "2-3" (strictly 0..5 on both ends)
+  local a, b = string.match(s, "^(%d)%s*[-–]%s*(%d)$")
   if a and b then
-    local n1 = tonumber(a) or 0
-    local n2 = tonumber(b) or 0
-    if n1<0 then n1=0 end; if n1>5 then n1=5 end
-    if n2<0 then n2=0 end; if n2>5 then n2=5 end
+    local n1, n2 = tonumber(a), tonumber(b)
+    if not n1 or not n2 then return nil end
+    if n1 < 0 or n1 > 5 or n2 < 0 or n2 > 5 then return nil end
     local avg = (n1 + n2) / 2
     if math.abs(avg - math.floor(avg) - 0.5) < 0.0001 then
       return math.floor(avg)
@@ -587,12 +610,12 @@ local function ParseGearReply(msg)
       return math.floor(avg + 0.5)
     end
   end
+
+  -- Single digit "0".."5" only
   local n = tonumber(string.match(s, "^(%d)$") or "")
-  if n ~= nil then
-    if n<0 then n=0 end; if n>5 then n=5 end
-    return n
-  end
-  return nil
+  if n == nil then return nil end
+  if n < 0 or n > 5 then return nil end
+  return n
 end
 
 local function ContinueAfterGear(name, passed)
@@ -613,6 +636,29 @@ local function ContinueAfterGear(name, passed)
     QueuePush(name, pend.role, pend.class, pend.offered, true)
     QueueShowNext()
   end
+end
+
+-- Background watcher: expire gear sessions exactly at 90s and optionally whisper again
+if not INV._watch then
+  INV._watch = CreateFrame("Frame")
+  local acc = 0
+  INV._watch:SetScript("OnUpdate", function(_, elapsed)
+    acc = (acc or 0) + (elapsed or 0)
+    if acc < 0.35 then return end
+    acc = 0
+    local tNow = now()
+    for name, untilT in pairs(INV.awaitingGear) do
+      if untilT and tNow > untilT then
+        INV.awaitingGear[name] = nil
+        INV._gearAsked[name]   = nil
+        INV._gearAfterRole[name] = nil
+        INV._gearPending[name] = nil
+        if INV._gearTimeoutRemind then
+          say(name, "[Tactica]: Gearcheck timed out. Whisper again to continue.")
+        end
+      end
+    end
+  end)
 end
 
 -- active (auto-invite) path
@@ -761,8 +807,7 @@ local function handleRBConfirmAsk(author, msg)
     QueueShowNext(); return
   elseif offeredLetters and table.getn(offeredLetters) >= 1 then
     if table.getn(offeredLetters) == 1 then
-      local r = LETTER2ROLE[offeredLetters[1]]
-      say(author, "[Tactica]: Thanks! We are currently full on "..string.lower(r)..".")
+      say(author, "[Tactica]: Thanks! We are currently full on "..string.lower(LETTER2ROLE[offeredLetters[1]])..".")
     else
       say(author, "[Tactica]: Thanks! We are currently full on the roles you mentioned.")
     end
@@ -1181,10 +1226,10 @@ INV._evt:SetScript("OnEvent", function()
     TryConvertToRaid("roster-event", 6)
 
   elseif event == "RAID_ROSTER_UPDATE" then
-    -- If we've become a raid, clear the flag and flush pending reinvites
+    -- If become a raid, clear the flag and flush pending reinvites
     if (GetNumRaidMembers and (GetNumRaidMembers() or 0) > 0) then
       INV._convertWhenFirstJoins = false
-      -- process any invites we held while converting
+      -- process any invites held while converting
       local reinv = INV._pendingReinvites
       INV._pendingReinvites = {}
       for _,pend in pairs(reinv) do

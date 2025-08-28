@@ -590,7 +590,7 @@ function Tactica:CanAutoPost()
     for i = 1, 40 do
         local name, rank = GetRaidRosterInfo(i)
         if name and name == playerName then
-            -- Rank 2 is leader, rank 1 is assist in vanilla
+            -- Rank 2 is leader, rank 1 is assist in TWoW
             isLeader = (rank == 2)
             isAssist = (rank == 1)
             break
@@ -742,7 +742,7 @@ function Tactica:PostTactic(raidName, bossName, tacticName)
     
     if tacticText then
         if TacticaDB.Settings.UseRaidWarning then
-            SendChatMessage("--- "..string.upper(bossName or "DEFAULT").." STRATEGY (read chat) ---", "RAID_WARNING");
+            SendChatMessage("[TACTICA] "..string.upper(bossName or "DEFAULT").." STRATEGY (read chat):", "RAID_WARNING");
         end
         
 		-- only post to raid
@@ -760,7 +760,7 @@ function Tactica:PostTacticToSelf(raidName, bossName, tacticName)
     local tacticText = self:FindTactic(raidName, bossName, tacticName)
     if tacticText then
         local f = DEFAULT_CHAT_FRAME or ChatFrame1
-        f:AddMessage("|cff33ff99Tactica (Self):|r --- " .. string.upper(bossName or "DEFAULT") .. " STRATEGY ---")
+        f:AddMessage("|cff33ff99[Tactica] (Self):|r " .. string.upper(bossName or "DEFAULT") .. " STRATEGY:")
         for line in string.gmatch(tacticText, "([^\n]+)") do
             f:AddMessage(line)
         end
@@ -1209,7 +1209,7 @@ function Tactica:ShowOptionsFrame()
   f.cbAutoGroup   = mkcb("TacticaOptAutoGroup",   -68, "Loot popup after boss (RL)")
   f.cbRoleWhisper = mkcb("TacticaOptRoleWhisper", -88, "Whisper role confirmations")
 
-  -- wire click handlers (use 'this' for Vanilla)
+  -- wire click handlers
   f.cbAutoPost:SetScript("OnClick", function()
     if not (TacticaDB and TacticaDB.Settings) then return end
     TacticaDB.Settings.AutoPostOnBoss = this:GetChecked() and true or false
@@ -1794,7 +1794,7 @@ function Tactica:CreatePostFrame()
     selfBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 15)
     selfBtn:SetText("Post to Self")
 	
-    -- Vanilla green styling
+    -- Green styling
 	local fs = selfBtn:GetFontString()
 	if fs and fs.SetTextColor then
 	  fs:SetTextColor(0.2, 1.0, 0.2) -- green text
