@@ -1,37 +1,51 @@
 # Tactica
-## Post tactics, assign loot rules & raid-roles, synced!
-Tactical addon for raid leading with ease — post ~90 clear boss strategies (or add your own), assign & sync roles in raid roster, and smooth out loot mode changes, all in one place.
+## Auto-build raids (invite/gearcheck), post tactics, set loot rules & assign roles - synced!
+Tactical addon for raid leading with ease — post ~90 clear boss strategies (or add your own), auto-build raids (LFM creator/poster with auto-invite/auto-gearcheck/auto-assign), assign & sync roles in raid roster, and smooth out loot mode changes, all in one place.
+
+_Access all functionalities and commands via **Minimap Icon**_ (<img width="15" height="15" alt="Tactica-Icon" src="https://github.com/user-attachments/assets/0e7b9ac6-d5c4-4f7e-b944-9fc8f96ec73b" />).
+
 
 ## What it does (TL;DR)
 ### 1. Announce tactics fast
-- Post default or custom strategies to self or raid with one click or /tt commands. Auto-popup on boss (toggleable).
-- `/tt` or `/tt post` for settings and frame.
-- `/tt auto` to manually toggle the popup _(note: this is also available via /tt options)_.
+- Post default or custom strategies to self or raid with one click or `/tt post` commands. Auto-popup on boss (toggleable).
+- `/tt post` for settings and frame.
+- `/tt auto` toggles the auto-popup on boss (same as the checkbox in **/tt options**).
 - `/tt list` for all raid tactics available (default and custom).
 - `/tt add` to add your custom tactics ("enter" for line breaks will divide tactic into separate /raid msg's).
 - `/tt remove` to remove your custom tactics.
 - `/tt <Raid Name>,<Boss Name>,[Tactic Name(optional)]` for macro use of Tactica tactics.
-<img width="269" height="225" alt="image" src="https://github.com/user-attachments/assets/1831fbbb-7480-44e6-bc9d-11d3fea815b9" />
-<img width="496" height="372" alt="Tactica Add" src="https://github.com/user-attachments/assets/383e90da-8d17-4957-8306-3c48e1798d18" />
+<img width="269" height="227" alt="Tactica-Post" src="https://github.com/user-attachments/assets/9879895e-5b73-4098-88f9-d298b794a349" />
+<img width="497" height="370" alt="Tactica-Add" src="https://github.com/user-attachments/assets/95ed350c-f5a6-45ef-bc4f-aa5a8a8beff3" />
 
 ### 2. Organize your comp at a glance
 - Right-click raid roster to Toggle as Healer / DPS / Tank. Roles sync to everyone running Tactica; latest leader/assist decision wins.
 - Clean indicators next to names (H/D/T).
-- pfUI communication: Tactica tank role also flags tank role in pfUI when available (requires SuperWoW).
+- pfUI (optional): Tactica’s Tank role also flags pfUI’s tank role when pfUI is present (requires SuperWoW).
 - `/tt roles` to post the assigned and number of tanks, healers and DPS, respectively, to the raid.
-- `/tt rolewhisper` toggle the role whisper function on/off _(note: this is also available via /tt options)_.
+- `/tt rolewhisper` toggle the role whisper function on/off (same as the checkbox in **/tt options**).
 <img width="492" height="327" alt="Tactica - Roster" src="https://github.com/user-attachments/assets/991708d0-b30d-402f-9eff-57cb767b9859" />
 
-### 3. Loot mode QoL for bosses
-- Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). _(Note: this is available via /tt options)_.
+### 3. Build Raids (LFM poster/creator)
+- Select raid, size and setup and Tactica will do the rest. Creating a seamless LFM message, to post in your channels.
+- Choose number of SR (Soft Reserves), HR (Hard Reserves), Tanks, Healers, and whether you can Summon.
+- Select Yell, LFG or/and World to post in - set optional "Auto-announce".
+- Syncs with raid roster, so when you assign a role - the LFM announcement will adjust accordingly.
+- Auto-invite/auto-assign/auto-gearcheck, all built-in to ease the pain.
+- `/tt build` for the LFM/raid builder UI.
+- `/tt lfm` posts once using your current Builder settings and respects a 30s cooldown (shared with the “Announce” button).
+- `/tt autoinvite` or `/ttai` for standalone auto-invite frame, with auto-assign roles functionality.
+<img width="595" height="665" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/3e04ce83-9fb9-4cf2-a017-8fd88e8cdcb3" />
+
+### 4. Loot mode QoL for bosses
+- Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). (same as the checkbox in **/tt options**).
 - Works even when ML ≠ RL: the ML’s client pings the RL via addon message when the corpse is emptied.
 - “Don’t ask again this raid” (raid-scoped) and global on/off setting.
 <img width="287" height="161" alt="Tactica-loot" src="https://github.com/user-attachments/assets/f8fcd04a-8060-4fa1-bb13-7d76810d9800" />
 
 ## Quick start
-- `/tt` or `/tactica` — open the Post UI
-- `/tt options` or `/tactica options` — open the option UI
-- `/tt help` or `/tactica help` — full command list
+- Use the **minimap icon** — full access and command list
+- `/tt` or `/tactica` or `/tt help` — full command list
+- `/tt options` — open the Options UI
 - Toggle auto behaviors in the option UI (checkboxes), or use the slash commands mentioned in help.
 <img width="288" height="174" alt="image" src="https://github.com/user-attachments/assets/d5d322dd-9e92-447d-892c-b896e787ce1d" />
 

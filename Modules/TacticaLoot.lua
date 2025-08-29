@@ -4,6 +4,19 @@
 -------------------------------------------------
 -- Small helpers & settings
 -------------------------------------------------
+-- Compatibility: provide gmatch/match if missing
+do
+  if not string.gmatch and string.gfind then
+    string.gmatch = function(s, p) return string.gfind(s, p) end
+  end
+  if not string.match then
+    string.match = function(s, p, init)
+      local _, _, cap1 = string.find(s, p, init)
+      return cap1
+    end
+  end
+end
+
 local function tlen(t)
   if table and table.getn then return table.getn(t) end
   local n=0; for _ in pairs(t) do n=n+1 end; return n

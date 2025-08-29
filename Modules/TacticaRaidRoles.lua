@@ -23,6 +23,16 @@ local function EnsureDB()
   if TacticaDB.RaidSignature ~= nil then TacticaDB.RaidSignature = nil end
 end
 
+-- Tell Raid Builder to refresh (safe if RB not loaded)
+local function NotifyBuilder()
+  if TacticaRaidBuilder and TacticaRaidBuilder.NotifyRoleAssignmentChanged then
+    TacticaRaidBuilder.NotifyRoleAssignmentChanged()
+  elseif TacticaRaidBuilder and TacticaRaidBuilder.RefreshPreview then
+    -- fallback for older RB builds
+    TacticaRaidBuilder.RefreshPreview()
+  end
+end
+
 ------------------------------------------------------------
 -- pfUI + SuperWoW detection
 ------------------------------------------------------------
@@ -187,6 +197,7 @@ local function SetExclusiveRole(name, role)
   if current == role then
     ClearAllRolesFor(name)
     if role == "T" and not suppressPfuiWrite then Pfui_SetTank(name, false) end
+	NotifyBuilder()
     return nil, (role == "H" and "not marked as Healer")
              or (role == "D" and "not marked as DPS")
              or (role == "T" and "not marked as Tank")
@@ -204,6 +215,7 @@ local function SetExclusiveRole(name, role)
     else
       return nil, nil
     end
+	NotifyBuilder()
     return role, (role == "H" and "marked as Healer")
                or (role == "D" and "marked as DPS")
                or (role == "T" and "marked as Tank")
@@ -223,6 +235,7 @@ local function ApplyRoleFromNetwork(name, role)
   else
     Pfui_SetTank(name, false)
   end
+  NotifyBuilder()
 end
 
 ------------------------------------------------------------
@@ -335,6 +348,7 @@ local function OnAddonMessage()
     TacticaDB.Tanks = {}
     Pfui_ReapplyAllTanks()
     if type(Tactica_DecorateRaidRoster) == "function" then Tactica_DecorateRaidRoster() end
+	NotifyBuilder();
     (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage("|cff33ff99Tactica:|r Role tags cleared (cleared by officer).")
     return
   end
@@ -344,10 +358,12 @@ local function OnAddonMessage()
     if role then
       ApplyRoleFromNetwork(n, role)
       if type(Tactica_DecorateRaidRoster) == "function" then Tactica_DecorateRaidRoster() end
+	  NotifyBuilder()
     end
   elseif t == "C" and n and n ~= "" then
     ClearAllRolesFor(n); Pfui_SetTank(n, false)
     if type(Tactica_DecorateRaidRoster) == "function" then Tactica_DecorateRaidRoster() end
+	NotifyBuilder()
   end
 end
 

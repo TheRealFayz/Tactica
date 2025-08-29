@@ -6,6 +6,21 @@
 -------------------------------------------------
 local TACTICA_PREFIX = "TACTICA"
 
+-- Provide gmatch/match if missing
+do
+  -- gmatch was gfind
+  if not string.gmatch and string.gfind then
+    string.gmatch = function(s, p) return string.gfind(s, p) end
+  end
+  -- Minimal match using find; returns the FIRST capture only
+  if not string.match then
+    string.match = function(s, p, init)
+      local _, _, cap1 = string.find(s, p, init)
+      return cap1
+    end
+  end
+end
+
 local function tlen(t)
   if table and table.getn then return table.getn(t) end
   local n=0; for _ in pairs(t) do n=n+1 end; return n
@@ -184,26 +199,25 @@ Tactica.Aliases = {
     -- Bosses
     ["rag"] = "Ragnaros",
     ["mag"] = "Magmadar",
-    ["geh"] = "Gehennas",
-    ["garr"] = "Garr",
-    ["ged"] = "Baron Geddon",
+    ["geddon"] = "Baron Geddon",
     ["shaz"] = "Shazzrah",
-    ["sulf"] = "Sulfuron Harbinger",
+    ["sulfuron"] = "Sulfuron Harbinger",
+	["thaurissan"] = "Sorcerer-thane Thaurissan",
     ["golemagg"] = "Golemagg the Incinerator",
-    ["domo"] = "Majordomo Executus",
-    ["razor"] = "Razorgore the Untamed",
-    ["brood"] = "Broodlord Lashlayer",
+    ["majordomo"] = "Majordomo Executus",
+    ["razorgore"] = "Razorgore the Untamed",
+    ["broodlord"] = "Broodlord Lashlayer",
     ["ebon"] = "Ebonroc",
     ["fire"] = "Firemaw",
     ["flame"] = "Flamegor",
-    ["chroma"] = "Chromaggus",
+    ["chrom"] = "Chromaggus",
     ["vael"] = "Vaelastrasz the Corrupt",
     ["nef"] = "Nefarian",
     ["venoxis"] = "High Priest Venoxis",
     ["mandokir"] = "Bloodlord Mandokir",
     ["jindo"] = "Jin'do the Hexxer",
     ["kur"] = "Kurinnaxx",
-    ["raja"] = "General Rajaxx",
+    ["rajaxx"] = "General Rajaxx",
     ["skeram"] = "The Prophet Skeram",
     ["cthun"] = "C'Thun",
     ["patch"] = "Patchwerk",
@@ -217,6 +231,7 @@ Tactica.Aliases = {
 	["medivh"] = "Echo of Medivh",
 	["incantagos"] = "Lay-Watcher Incantagos",
 	["gnarlmoon"] = "Keeper Gnarlmoon",
+	["solnius"] = "Solnius the Awakener",
 }
 
 if not UIDropDownMenu_CreateInfo then
@@ -224,6 +239,73 @@ if not UIDropDownMenu_CreateInfo then
         return {}
     end
 end
+-------------------------------------------------
+-- BOSS NAME ALIASES (multi-NPC → one boss, with hostility mode)
+-------------------------------------------------
+Tactica.BossNameAliases = {} -- [lower(aliasName)] = array of { raid="...", boss="...", when="hostile|friendly|any" }
+
+function Tactica:RegisterBossAliases(raidName, bossName, aliases, when)
+  if not raidName or not bossName or not aliases then return end
+  local mode = when or "any"
+  for i = 1, table.getn(aliases) do
+    local alias = aliases[i]
+    if alias and alias ~= "" then
+      local key = string.lower(alias)
+      if not Tactica.BossNameAliases[key] then Tactica.BossNameAliases[key] = {} end
+      table.insert(Tactica.BossNameAliases[key], { raid = raidName, boss = bossName, when = mode })
+    end
+  end
+end
+
+-- ZG: Vilebranch Speaker (attack to trigger boss) → Bloodlord Mandokir
+Tactica:RegisterBossAliases("Zul'Gurub", "Bloodlord Mandokir", {
+  "Vilebranch Speaker",
+}, "hostile")
+
+-- MC: Smoldaris & Basalthar → either name should trigger that encounter (hostile NPCs)
+Tactica:RegisterBossAliases("Molten Core", "Smoldaris & Basalthar", {
+  "Smoldaris", "Basalthar",
+}, "hostile")
+
+-- MC: Majordomo Executus (friendly talk-to-summon) → Ragnaros
+Tactica:RegisterBossAliases("Molten Core", "Ragnaros", {
+  "Majordomo Executus",
+}, "friendly")
+
+-- BWL: Vaelastrasz (friendly talk-to-start) → Vaelastrasz
+Tactica:RegisterBossAliases("Blackwing Lair", "Vaelastrasz the Corrupt", {
+  "Vaelastrasz the Corrupt",
+}, "friendly")
+
+-- BWL: Lord Victor Nefarius (friendly talk-to-start) → Nefarian
+Tactica:RegisterBossAliases("Blackwing Lair", "Nefarian", {
+  "Lord Victor Nefarius",
+}, "friendly")
+
+-- AQ40: Princess Yauj, Vem, and Lord Kri (attack any) → Bug Trio
+Tactica:RegisterBossAliases("Temple of Ahn'Qiraj", "Silithid Royalty (Bug Trio)", {
+  "Princess Yauj","Vem","Lord Kri",
+}, "hostile")
+
+-- AQ40: Emperor Vek'lor and Emperor Vek'nilash (attack any) → Twin Emperors
+Tactica:RegisterBossAliases("Temple of Ahn'Qiraj", "Twin Emperors", {
+  "Emperor Vek'lor","Emperor Vek'nilash",
+}, "hostile")
+
+-- Naxx:  Thane Korth'azz, Lady Blaumeux, Sir Zeliek, and Highlord Mograine (attack any) → 4HM
+Tactica:RegisterBossAliases("Naxxramas", "The Four Horsemen", {
+  "Thane Korth'azz","Lady Blaumeux","Sir Zeliek","Highlord Mograine",
+}, "hostile")
+
+-- Kara40: Any key piece should count → King (Chess) (they’re hostile; “any” is also fine)
+Tactica:RegisterBossAliases("Upper Karazhan Halls", "King (Chess)", {
+  "King","Rook","Bishop","Knight","Decaying Bishop","Malfunctioning Knight","Broken Rook","Withering Pawn",
+}, "hostile")
+
+-- ES: Solnius before spoken to → Solnius hostile (later the dragon Solnius the Awakener)
+Tactica:RegisterBossAliases("Emerald Sanctum", "Solnius the Awakener", {
+  "Solnius",
+}, "friendly")
 
 -------------------------------------------------
 -- INITIALIZATION
@@ -342,7 +424,7 @@ f:SetScript("OnEvent", function()
         InitializeSavedVariables()
         RunLaterTactica(1, function()
 		  local cf = DEFAULT_CHAT_FRAME or ChatFrame1
-		  cf:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt help|r or |cffffff00/tactica help|r.")
+		  cf:AddMessage("|cff33ff99Tactica loaded.|r Use |cffffff00/tt|r or |cffffff00/tactica|r or |cffffff00minimap icon.|r")
 		end)
     elseif event == "PLAYER_ENTERING_WORLD" then
     RunLaterTactica(10, function() Tactica_BroadcastVersionAll() end)
@@ -413,7 +495,7 @@ function Tactica:HandleTargetChange()
         return
     end
 
-    -- Check if we've already posted for this boss recently
+    -- Check if already posted for this boss recently
     local key = raidName..":"..bossName
     if self.RecentlyPosted[key] then
         return
@@ -438,23 +520,53 @@ function Tactica:HandleTargetChange()
 end
 
 function Tactica:IsBossTarget()
-    if not UnitExists("target") or UnitIsDead("target") or not UnitIsEnemy("player", "target") then
-        return nil, nil
-    end
-    
-    local targetName = UnitName("target")
-    if not targetName then return nil, nil end
-    
-    -- Check all raids and bosses
-    for raidName, bosses in pairs(self.Data) do
-        for bossName in pairs(bosses) do
-            if string.lower(bossName) == string.lower(targetName) then
-                return raidName, bossName
-            end
-        end
-    end
-    
+  if not UnitExists("target") or UnitIsDead("target") then
     return nil, nil
+  end
+
+  local targetName = UnitName("target")
+  if not targetName or targetName == "" then
+    return nil, nil
+  end
+
+  -- Determine friendliness/hostility
+  local isHostile = UnitCanAttack and UnitCanAttack("player", "target")
+  -- Treat "friendly" as "not hostile" for the purpose
+  local isFriendly = not isHostile
+
+  local lname = string.lower(targetName)
+
+  -- Alias match with conditional "when"
+  local entries = Tactica.BossNameAliases[lname]
+  if entries then
+    for i = 1, table.getn(entries) do
+      local e = entries[i]
+      local ok = (e.when == "any")
+                or (e.when == "hostile"  and isHostile)
+                or (e.when == "friendly" and isFriendly)
+      if ok then
+        local raidBlock = self.Data[e.raid]
+        if raidBlock and raidBlock[e.boss] then
+          return e.raid, e.boss
+        end
+      end
+    end
+  end
+
+  -- Direct boss-name match requires hostile (avoid false positives on friendlies)
+  if not isHostile then
+    return nil, nil
+  end
+
+  for raidName, bosses in pairs(self.Data) do
+    for bossName in pairs(bosses) do
+      if string.lower(bossName) == lname then
+        return raidName, bossName
+      end
+    end
+  end
+
+  return nil, nil
 end
 
 function Tactica:CanAutoPost()
@@ -478,7 +590,7 @@ function Tactica:CanAutoPost()
     for i = 1, 40 do
         local name, rank = GetRaidRosterInfo(i)
         if name and name == playerName then
-            -- Rank 2 is leader, rank 1 is assist in vanilla
+            -- Rank 2 is leader, rank 1 is assist in TWoW
             isLeader = (rank == 2)
             isAssist = (rank == 1)
             break
@@ -526,13 +638,12 @@ function Tactica:CommandHandler(msg)
     local args = self:GetArgs(msg)
     local command = string.lower(args[1] or "")
 
-    -- Always allow "help", "list", "add", and "remove"
     if command == "" then
-		self:ShowPostPopup(true)
-	elseif command == "help" then
-		self:PrintHelp()
-
-
+        self:PrintHelp()
+        return
+    elseif command == "help" then
+        self:PrintHelp()
+        return
     elseif command == "list" then
         self:ListAvailableTactics()
 
@@ -543,8 +654,26 @@ function Tactica:CommandHandler(msg)
         self:ShowRemovePopup()
 
     elseif command == "post" then
-        -- open the post UI
         self:ShowPostPopup(true)
+
+	elseif command == "build" then
+	  if TacticaRaidBuilder and TacticaRaidBuilder.Open then
+		TacticaRaidBuilder.Open()
+	  else
+		self:PrintError("Raid Builder module not loaded.")
+	  end
+	  return
+
+	elseif command == "autoinvite" then
+	  if TacticaInvite and TacticaInvite.Open then
+		TacticaInvite.Open()
+	  else
+		self:PrintError("Auto-Invite module not loaded.")
+	  end
+	  return
+
+	elseif command == "lfm" then
+	  if TacticaRaidBuilder and TacticaRaidBuilder.AnnounceOnce then TacticaRaidBuilder.AnnounceOnce() end
 
     elseif command == "autopost" then
 		-- toggle only
@@ -613,10 +742,10 @@ function Tactica:PostTactic(raidName, bossName, tacticName)
     
     if tacticText then
         if TacticaDB.Settings.UseRaidWarning then
-            SendChatMessage("--- "..string.upper(bossName or "DEFAULT").." STRATEGY (read chat) ---", "RAID_WARNING");
+            SendChatMessage("[TACTICA] "..string.upper(bossName or "DEFAULT").." STRATEGY (read chat):", "RAID_WARNING");
         end
         
-		-- We only post to raid
+		-- only post to raid
 		local chatType = "RAID"
 
         for line in string.gmatch(tacticText, "([^\n]+)") do
@@ -631,7 +760,7 @@ function Tactica:PostTacticToSelf(raidName, bossName, tacticName)
     local tacticText = self:FindTactic(raidName, bossName, tacticName)
     if tacticText then
         local f = DEFAULT_CHAT_FRAME or ChatFrame1
-        f:AddMessage("|cff33ff99Tactica (Self):|r --- " .. string.upper(bossName or "DEFAULT") .. " STRATEGY ---")
+        f:AddMessage("|cff33ff99[Tactica] (Self):|r " .. string.upper(bossName or "DEFAULT") .. " STRATEGY:")
         for line in string.gmatch(tacticText, "([^\n]+)") do
             f:AddMessage(line)
         end
@@ -740,26 +869,38 @@ end
 
 -- Post Frame Lock/Position Handling
 function Tactica:SavePostFramePosition()
-    if not self.postFrame then return end
-    
-    local point, _, relativePoint, x, y = self.postFrame:GetPoint()
-    TacticaDB.Settings.PostFrame.position = {
-        point = point,
-        relativeTo = "UIParent",
-        relativePoint = relativePoint,
-        x = x,
-        y = y
-    }
-    TacticaDB.Settings.PostFrame.locked = self.postFrame.locked
+  if not self.postFrame then return end
+  if not TacticaDB then TacticaDB = {} end
+  TacticaDB.Settings = TacticaDB.Settings or {}
+  TacticaDB.Settings.PostFrame = TacticaDB.Settings.PostFrame or {}
+
+  local point, _, relativePoint, x, y = self.postFrame:GetPoint(1)
+  TacticaDB.Settings.PostFrame.position = {
+    point = point or "CENTER",
+    relativeTo = "UIParent",
+    relativePoint = relativePoint or point or "CENTER",
+    x = x or 0,
+    y = y or 0,
+  }
+  TacticaDB.Settings.PostFrame.locked = (self.postFrame.locked == true)
 end
 
 function Tactica:RestorePostFramePosition()
-    if not self.postFrame or not TacticaDB.Settings.PostFrame then return end
-    
-    local pos = TacticaDB.Settings.PostFrame.position
+  if not self.postFrame then return end
+  if not (TacticaDB and TacticaDB.Settings and TacticaDB.Settings.PostFrame) then
     self.postFrame:ClearAllPoints()
-    self.postFrame:SetPoint(pos.point, pos.relativeTo, pos.relativePoint, pos.x, pos.y)
-    self.postFrame.locked = TacticaDB.Settings.PostFrame.locked
+    self.postFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    return
+  end
+  local pf = TacticaDB.Settings.PostFrame
+  local p  = pf.position or {}
+  self.postFrame:ClearAllPoints()
+  if p.point then
+    self.postFrame:SetPoint(p.point, UIParent, p.relativePoint or p.point, p.x or 0, p.y or 0)
+  else
+    self.postFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+  end
+  self.postFrame.locked = (pf.locked == true)
 end
 
 function Tactica:StringsEqual(a, b)
@@ -849,16 +990,22 @@ end
 
 function Tactica:PrintHelp()
     self:PrintMessage("Tactica Commands:");
-    self:PrintMessage("  |cffffff00/tt <Raid>,<Boss>,[Tactic]|r");
-    self:PrintMessage("    - Posts a tactic with header to Raid Warning and each line to Raid.");
-    self:PrintMessage("  |cffffff00/tt add|r");
-    self:PrintMessage("    - Opens a popup to add a custom tactic.");
+	self:PrintMessage("  |cffffff78/tt build|r")
+	self:PrintMessage("    – Open Raid Builder to create auto-adjusting LFM announcements.")
+	self:PrintMessage("  |cffffff78/tt lfm|r")
+	self:PrintMessage("    – Announce current Raid Builder message")
+	self:PrintMessage("  |cffffff78/tt autoinvite|r")
+	self:PrintMessage("    – Open Auto-Invite window (aliases: |cffffff00/ttai|r)")
     self:PrintMessage("  |cffffff00/tt post|r");
     self:PrintMessage("    - Opens a popup to select and post a tactic.");
-    self:PrintMessage("  |cffffff00/tt list|r");
-    self:PrintMessage("    - Lists all available tactics.");
+	self:PrintMessage("  |cffffff00/tt <Raid>,<Boss>,[Tactic]|r");
+    self:PrintMessage("    - Posts a tactic via command (for Macros).");
+    self:PrintMessage("  |cffffff00/tt add|r");
+    self:PrintMessage("    - Opens a popup to add a custom tactic.");
     self:PrintMessage("  |cffffff00/tt remove|r");
     self:PrintMessage("    - Opens a popup to remove a custom tactic.");
+    self:PrintMessage("  |cffffff00/tt list|r");
+    self:PrintMessage("    - Lists all available tactics.");
 	self:PrintMessage("  |cffffff00/tt autopost|r");
     self:PrintMessage("    - Toggle the auto-popup when targeting a boss.");
 	self:PrintMessage("  |cffffff00/ttpush|r or |cffffff00/tt pushroles|r");
@@ -988,7 +1135,7 @@ function Tactica:PostRoleSummary()
     postNames("Tanks",   tanks)
     postNames("Healers", healers)
 
-    -- DPS = everyone not marked T/H (we don’t list names; just the count)
+    -- DPS = everyone not marked T/H (don’t list names; just the count)
     local nT       = (table.getn and table.getn(tanks))   or 0
     local nH       = (table.getn and table.getn(healers)) or 0
     local dpsTotal = total - nT - nH
@@ -1031,16 +1178,18 @@ function Tactica:ShowOptionsFrame()
   local f = CreateFrame("Frame", "TacticaOptionsFrame", UIParent)
   f:SetWidth(235); f:SetHeight(145)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-  f:SetBackdrop({
-    bgFile  = "Interface\\DialogFrame\\UI-DialogBox-Background",
-    edgeFile= "Interface\\DialogFrame\\UI-DialogBox-Border",
-    tile = true, tileSize = 32, edgeSize = 32,
-    insets = { left = 11, right = 12, top = 12, bottom = 11 }
+    f:SetBackdrop({
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 16, edgeSize = 32,
+    insets = { left=11, right=12, top=12, bottom=11 }
   })
-  f:SetFrameStrata("DIALOG")
+	f:SetBackdropColor(0, 0, 0, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
+	f:SetFrameStrata("DIALOG")
 
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOP", f, "TOP", 0, -10)
+  title:SetPoint("TOP", f, "TOP", 0, -12)
   title:SetText("Tactica Options")
 
   -- helper to build one checkbox + label, and return the checkbox
@@ -1054,13 +1203,13 @@ function Tactica:ShowOptionsFrame()
     return cb
   end
 
-  -- create all checkboxes and keep references so we can refresh them
+  -- create all checkboxes and keep references - can refresh them
   f.cbAutoPost    = mkcb("TacticaOptAutoPost",    -28, "Auto-open Post UI on boss")
   f.cbAutoML      = mkcb("TacticaOptAutoML",      -48, "Auto Master Loot on boss (RL)")
   f.cbAutoGroup   = mkcb("TacticaOptAutoGroup",   -68, "Loot popup after boss (RL)")
   f.cbRoleWhisper = mkcb("TacticaOptRoleWhisper", -88, "Whisper role confirmations")
 
-  -- wire click handlers (use 'this' for Vanilla)
+  -- wire click handlers
   f.cbAutoPost:SetScript("OnClick", function()
     if not (TacticaDB and TacticaDB.Settings) then return end
     TacticaDB.Settings.AutoPostOnBoss = this:GetChecked() and true or false
@@ -1213,18 +1362,21 @@ function Tactica:CreateAddFrame()
     f:SetHeight(300)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 11, right = 12, top = 12, bottom = 11 }
-    })
-    f:SetFrameStrata("DIALOG")
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 16, edgeSize = 32,
+    insets = { left=11, right=12, top=12, bottom=11 }
+  })
+	f:SetBackdropColor(0, 0, 0, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
+	f:SetFrameStrata("DIALOG")
     f:Hide()
     
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOP", f, "TOP", 0, -15)
     title:SetText("Add New Tactic")
+	title:SetFontObject(GameFontNormalLarge)
 
     -- RAID DROPDOWN
     local raidLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1419,15 +1571,19 @@ function Tactica:CreatePostFrame()
     f:SetHeight(185)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 11, right = 12, top = 12, bottom = 11 }
-    })
-    f:SetFrameStrata("DIALOG")
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 16, edgeSize = 32,
+    insets = { left=11, right=12, top=12, bottom=11 }
+  })
+	f:SetBackdropColor(0, 0, 0, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
+	f:SetFrameStrata("FULLSCREEN_DIALOG")
     f:SetMovable(true)
     f:EnableMouse(true)
     f:RegisterForDrag("LeftButton")
+	f:SetClampedToScreen(true)
+	if f.SetUserPlaced then f:SetUserPlaced(true) end
     f.locked = false
     
     f:SetScript("OnDragStart", function()
@@ -1444,13 +1600,18 @@ function Tactica:CreatePostFrame()
     -- Title
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -15)
-    title:SetText("Post Tactic to Raid")
+    title:SetText("Post Tactic")
+	title:SetFontObject(GameFontNormalLarge)
 
     -- Close button (X)
     local closeButton = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
     closeButton:SetScript("OnClick", function() f:Hide() end)
 
+	f:SetScript("OnHide", function()
+	  Tactica:SavePostFramePosition()
+	end)
+	
 	 -- Lock button (icon)
 	local lockButton = CreateFrame("Button", "TacticaLockButton", f)
 	lockButton:SetWidth(18); lockButton:SetHeight(18)
@@ -1519,7 +1680,7 @@ function Tactica:CreatePostFrame()
 	  if GameTooltip then GameTooltip:Hide() end
 	end)
 
-	-- store a reference so we can tint while options is open
+	-- store a reference - tint while options is open
 	Tactica.optionsButton = optionsButton
 
 	
@@ -1552,6 +1713,10 @@ function Tactica:CreatePostFrame()
 
     -- Initialize dropdowns
     f:SetScript("OnShow", function()
+	if not f._restoredOnce then
+	  Tactica:RestorePostFramePosition()
+	  f._restoredOnce = true
+	end
         -- Initialize raid dropdown
         UIDropDownMenu_Initialize(raidDropdown, function()
             local raids = {
@@ -1584,9 +1749,6 @@ function Tactica:CreatePostFrame()
 				not (TacticaDB and TacticaDB.Settings and TacticaDB.Settings.AutoPostOnBoss == false)
 			)
 		end
-		
-        -- Restore position
-        Tactica:RestorePostFramePosition()
 		
 		if UpdateLockIcon then UpdateLockIcon() end
 		
@@ -1632,7 +1794,7 @@ function Tactica:CreatePostFrame()
     selfBtn:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 10, 15)
     selfBtn:SetText("Post to Self")
 	
-    -- Vanilla green styling
+    -- Green styling
 	local fs = selfBtn:GetFontString()
 	if fs and fs.SetTextColor then
 	  fs:SetTextColor(0.2, 1.0, 0.2) -- green text
@@ -1687,45 +1849,20 @@ function Tactica:CreatePostFrame()
             Tactica:PrintMessage("Auto-popup is |cffff5555OFF|r. Use '/tt post' or '/tt autopost' to enable.")
         end
     end)
-	
-	--[[	-- Auto Master Loot checkbox (below Auto-open)
-	local autoML = CreateFrame("CheckButton", "TacticaAutoMasterLootCB", f, "UICheckButtonTemplate")
-	autoML:SetWidth(24); autoML:SetHeight(24)
-	autoML:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 60)
-	local autoMLTxt = getglobal("TacticaAutoMasterLootCBText")
-	if autoMLTxt then autoMLTxt:SetText("Auto Master Loot on boss") end
-	autoML:SetChecked(TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoMasterLoot)
-	autoML:SetScript("OnClick", function()
-		if not (TacticaDB and TacticaDB.Settings) then return end
-		TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
-		TacticaDB.Settings.Loot.AutoMasterLoot = autoML:GetChecked() and true or false
-		if TacticaDB.Settings.Loot.AutoMasterLoot then
-			Tactica:PrintMessage("Auto Master Loot is |cff00ff00ON|r.")
-		else
-			Tactica:PrintMessage("Auto Master Loot is |cffff5555OFF|r.")
-		end
-	end)
-
-	-- Group Loot popup checkbox (to the right of Auto-ML)
-	local autoGL = CreateFrame("CheckButton", "TacticaAutoGroupPopupCB", f, "UICheckButtonTemplate")
-	autoGL:SetWidth(24); autoGL:SetHeight(24)
-	autoGL:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 40)
-	local autoGLTxt = getglobal("TacticaAutoGroupPopupCBText")
-	if autoGLTxt then autoGLTxt:SetText("Ask to switch to Group Loot") end
-	autoGL:SetChecked(TacticaDB and TacticaDB.Settings and TacticaDB.Settings.Loot and TacticaDB.Settings.Loot.AutoGroupPopup)
-	autoGL:SetScript("OnClick", function()
-		if not (TacticaDB and TacticaDB.Settings) then return end
-		TacticaDB.Settings.Loot = TacticaDB.Settings.Loot or {}
-		TacticaDB.Settings.Loot.AutoGroupPopup = autoGL:GetChecked() and true or false
-		if TacticaDB.Settings.Loot.AutoGroupPopup then
-			Tactica:PrintMessage("Group Loot popup is |cff00ff00ON|r.")
-		else
-			Tactica:PrintMessage("Group Loot popup is |cffff5555OFF|r.")
-		end
-	end)]]
-
-    self.postFrame = f
+	self.postFrame = f
+	Tactica:RestorePostFramePosition()
+	f._restoredOnce = true
+	if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.PostFrame then
+	  f.locked = (TacticaDB.Settings.PostFrame.locked == true)
+	else
+	  f.locked = false
+	end
+	if UpdateLockIcon then UpdateLockIcon() end
 end
+
+-------------------------------------------------
+-- REMOVE TACTIC UI
+-------------------------------------------------
 
 function Tactica:CreateRemoveFrame()
     if self.removeFrame then return end
@@ -1736,12 +1873,14 @@ function Tactica:CreateRemoveFrame()
     f:SetHeight(165)
     f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     f:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 11, right = 12, top = 12, bottom = 11 }
-    })
-    f:SetFrameStrata("DIALOG")
+    bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true, tileSize = 16, edgeSize = 32,
+    insets = { left=11, right=12, top=12, bottom=11 }
+  })
+	f:SetBackdropColor(0, 0, 0, 1)
+	f:SetBackdropBorderColor(1, 1, 1, 1)
+	f:SetFrameStrata("DIALOG")
     f:Hide()
     
     -- Title
@@ -1753,7 +1892,7 @@ function Tactica:CreateRemoveFrame()
     local closeButton = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
     closeButton:SetScript("OnClick", function() f:Hide() end)
-
+	
     -- RAID DROPDOWN
     local raidLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     raidLabel:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -40)
@@ -2064,17 +2203,172 @@ function Tactica:ShowRemovePopup()
     UIDropDownMenu_SetText(Tactica.selectedBoss or "Select Boss", TacticaRemoveBossDropdown)
     UIDropDownMenu_SetText("Select Tactic", TacticaRemoveTacticDropdown)
     
-    -- If we have a selected raid with custom tactics, update boss dropdown
+    -- If selected raid with custom tactics, update boss dropdown
     if Tactica.selectedRaid and TacticaDB.CustomTactics[Tactica.selectedRaid] then
         self:UpdateRemoveBossDropdown(Tactica.selectedRaid)
         
-        -- If we have a selected boss with custom tactics, update tactic dropdown
+        -- If selected boss with custom tactics, update tactic dropdown
         if Tactica.selectedBoss and TacticaDB.CustomTactics[Tactica.selectedRaid][Tactica.selectedBoss] then
             self:UpdateRemoveTacticDropdown(Tactica.selectedRaid, Tactica.selectedBoss)
         end
     end
     
     self.removeFrame:Show()
+end
+
+-------------------------------------------------
+-- MINIMAP ICON & MENU (self-contained section)
+-------------------------------------------------
+do
+  -- small SV pocket; create defaults on first load
+  local function _MiniSV()
+    TacticaDB                = TacticaDB or {}
+    TacticaDB.Settings       = TacticaDB.Settings or {}
+    TacticaDB.Settings.Minimap = TacticaDB.Settings.Minimap or {
+      angle = 215,
+      offset = 0,
+      locked = false,
+      hide = false,
+    }
+    return TacticaDB.Settings.Minimap
+  end
+
+  -- compute minimap button position
+  local function _PlaceMini(btn)
+    local sv = _MiniSV()
+    local rad = math.rad(sv.angle or 215)
+    local r   = (80 + (sv.offset or 0))
+    local x   = 53 - (r * math.cos(rad))
+    local y   = (r * math.sin(rad)) - 55
+    btn:ClearAllPoints()
+    btn:SetPoint("TOPLEFT", Minimap, "TOPLEFT", x, y)
+  end
+
+  -- help lines for tooltip (keep in sync with /tt help)
+  local function _HelpLines()
+    return {
+      "|cffffff00/tt help|r – show commands",
+	  "|cffffff78/tt build|r – open Raid Builder",  
+	  "|cffffff78/tt lfm|r – announce Raid Builder msg",
+	  "|cffffff78/tt autoinvite|r – open Auto Invite",
+      "|cffffff00/tt post|r – open post UI",
+      "|cffffff00/tt add|r – add custom tactic",
+      "|cffffff00/tt remove|r – remove custom tactic",
+      "|cffffff00/tt list|r – list all tactics",
+      "|cffffff00/tt autopost|r – toggle auto-open on boss",
+      "|cffffff00/tt roles|r – post tank/healer summary",
+      "|cffffff00/tt rolewhisper|r – toggle role whisper",
+      "|cffffff00/tt options|r – options panel",
+    }
+  end
+
+  -------------------------------------------------
+  -- The drop-down minimap menu
+  -------------------------------------------------
+  local menu = CreateFrame("Frame", "TacticaMinimapMenu", UIParent, "UIDropDownMenuTemplate")
+  local function _MenuInit()
+    local info
+
+    info = { isTitle = 1, text = "Tactica", notCheckable = 1, justifyH = "CENTER" }
+    UIDropDownMenu_AddButton(info, 1)
+
+    local add = function(text, fn, disabled)
+      info = { notCheckable = 1, text = text, disabled = disabled and true or nil, func = fn }
+      UIDropDownMenu_AddButton(info, 1)
+    end
+
+    add("Open Post Tactics", function() if Tactica and Tactica.ShowPostPopup then Tactica:ShowPostPopup(true) end end)
+    add("Open Add Tactics",  function() if Tactica and Tactica.ShowAddPopup  then Tactica:ShowAddPopup()  end end)
+    add("Open Remove Tactics", function() if Tactica and Tactica.ShowRemovePopup then Tactica:ShowRemovePopup() end end)
+    add("Open Raid Builder", function()
+      if TacticaRaidBuilder and TacticaRaidBuilder.Open then
+        TacticaRaidBuilder.Open()
+      else
+        if Tactica and Tactica.PrintError then Tactica:PrintError("Raid Builder module not loaded.") end
+      end
+    end)
+	add("Open Auto Invite", function()
+      if TacticaInvite and TacticaInvite.Open then
+        TacticaInvite.Open()
+      else
+        if Tactica and Tactica.PrintError then Tactica:PrintError("Auto-Invite module not loaded.") end
+      end
+    end)
+    add("Open Options", function() if Tactica and Tactica.ShowOptionsFrame then Tactica:ShowOptionsFrame() end end)
+    add("Tactica Help",  function() if Tactica and Tactica.PrintHelp then Tactica:PrintHelp() end end)
+  end
+  menu.initialize = _MenuInit
+  menu.displayMode = "MENU"
+
+  -------------------------------------------------
+  -- The minimap button
+  -------------------------------------------------
+  local btn = CreateFrame("Button", "TacticaMinimapButton", Minimap)
+  btn:SetFrameStrata("MEDIUM")
+  btn:SetWidth(31); btn:SetHeight(31)
+
+  -- art
+  local overlay = btn:CreateTexture(nil, "OVERLAY")
+  overlay:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+  overlay:SetWidth(54); overlay:SetHeight(54)
+  overlay:SetPoint("TOPLEFT", 0, 0)
+
+  local icon = btn:CreateTexture(nil, "BACKGROUND")
+  icon:SetTexture("Interface\\AddOns\\Tactica\\Media\\tactica-icon")
+  icon:SetTexCoord(0.05, 0.95, 0.05, 0.95)
+  icon:SetWidth(20); icon:SetHeight(20)
+  icon:SetPoint("TOPLEFT", 6, -6)
+
+  local hlt = btn:CreateTexture(nil, "HIGHLIGHT")
+  hlt:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
+  hlt:SetBlendMode("ADD")
+  hlt:SetAllPoints(btn)
+
+  btn:RegisterForDrag("LeftButton", "RightButton")
+  btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+  -- drag to move (unless locked)
+  btn:SetScript("OnDragStart", function()
+    local sv = _MiniSV()
+    if sv.locked then return end
+    btn:SetScript("OnUpdate", function()
+      local x, y = GetCursorPosition()
+      local mx, my = Minimap:GetCenter()
+      local scale = Minimap:GetEffectiveScale()
+      local ang = math.deg(math.atan2(y/scale - my, x/scale - mx))
+      _MiniSV().angle = ang
+      _PlaceMini(btn)
+    end)
+  end)
+  btn:SetScript("OnDragStop", function() btn:SetScript("OnUpdate", nil) end)
+
+  -- click: open drop-down (left or right)
+  btn:SetScript("OnClick", function()
+    ToggleDropDownMenu(1, nil, menu, "TacticaMinimapButton", 0, 0)
+  end)
+
+  -- tooltip: first line + the help list
+  btn:SetScript("OnEnter", function()
+    GameTooltip:SetOwner(btn, "ANCHOR_LEFT")
+	GameTooltip:AddLine("TACTICA", 0.2, 1.0, 0.6)
+    GameTooltip:AddLine("Click minimap icon to open menu", 1, 1, 1)
+    GameTooltip:AddLine(" ")
+    for _, line in ipairs(_HelpLines()) do
+      GameTooltip:AddLine(line, 0.9, 0.9, 0.9, 1)
+    end
+    GameTooltip:Show()
+  end)
+  btn:SetScript("OnLeave", function() if GameTooltip:IsOwned(btn) then GameTooltip:Hide() end end)
+
+  -- show/hide + initial placement on addon load
+  local ev = CreateFrame("Frame")
+  ev:RegisterEvent("ADDON_LOADED")
+  ev:SetScript("OnEvent", function()
+    if event ~= "ADDON_LOADED" or arg1 ~= "Tactica" then return end
+    local sv = _MiniSV()
+    if sv.hide then btn:Hide() else btn:Show() end
+    _PlaceMini(btn)
+  end)
 end
 
 -------------------------------------------------
@@ -2120,11 +2414,17 @@ end
 
 Tactica.DefaultData = {
     ["Molten Core"] = {
+    		["Incindis"] = {
+      			["Default"] = "Tanks: MT on boss, OT pick up adds from hatched eggs and move them aside. Face boss away. Move out of pull-in AoE.\nDPS: Kill spawned adds quickly. Focus boss—eggs can’t all be nuked before hatch. Run away when pulled in.\nHealers: Heal through pull-in AoE + add dmg. Watch MT.\nClass Specific: AoE classes handle adds fast. MDPS back off on pull-in.\nBoss Ability: Pull-in + AoE burst. Eggs hatch adds. Small AoE around boss."
+    		},
         ["Lucifron"] = {
             ["Default"] = "Tanks: MT=Skull,X, OT=Square, and stack them.\nDPS: Focus on adds first, and avoid cleave. When both adds are dead, kill Lucifron.\nHealers: Focus Tanks and those with Impending Doom.\nClass Specific: Mages/Druids/Priests/Paladins - Cleanse Curse of Lucifron and Impending Doom quickly (Prio)."
         },
         ["Magmadar"] = {
             ["Default"] = "Tanks: Face boss away from the raid.\nMDPS: Avoid fire patches and stay behind the boss.\nRDPS: Max range to avoid fear.\nHealers: Heal through fire spikes, and focus tank.\nClass Specific: Hunters rotate Tranquilizing Shot to remove Frenzy. Priests rotate Fear Ward on tank (prio). All Shaman use Tremor Totem to help with fear."
+    		},
+     		["Smoldaris & Basalthar"] = {
+			      ["Default"] = "Tanks: 1 tank each. Smoldaris: FR gear, tank on spot face away (will do a fire-cone). Basalthar: watch knockback, tank against wall (entrence - towards same side as Smoldaris).\nDPS: Attack Smoldaris or Basalthar depending on Molten Bulwark buff on boss (start Basalthar). Avoid cone + AoE knockback. Swap between when called buff is up on bosses. Range stand where Basalthar is before pull.\nHealers: Heavy tank heals on Smoldaris. Heal repositioning after knockbacks. Smoldaris will do AoE - heal through. Stand with range where Smoldaris is before pull.\nClass Specific: FR pots useful. MDPS max melee range. Track Bulwark.\nBoss Ability: Smoldaris cone + AoE fire blasts. Basalthar knockback. Both will get buff Molten Bulwark (swap to other boss)."
         },
         ["Gehennas"] = {
             ["Default"] = "Tanks: Use FAP at pull. MT=Skull,X, OT=Square, and stack them. Move if Rain of Fire is on the boss or adds.\nDPS: Kill adds first. Avoid Rain of Fire. MDPS benefits from using a FAP on pull (adds stun aoe).\nHealers: Focus tank, move out of Rain of Fire and decurse (if you can).\nClass Specific: Mages/Druids focus (prio) on curse removal. Gehennas's Curse (-75% healing)."
@@ -2146,6 +2446,9 @@ Tactica.DefaultData = {
         },
         ["Majordomo"] = {
             ["Default"] = "Majordomo Tank: Keep him where he is at the start of the fight, and taunt him back every time he runs away.\nOther Tanks: Pick up and hold assigned targets while DPS single target them down. If polymorph breaks, attempt to pick up as many of the healers as you can.\nDPS: BOSS IS IMMUNE TO ALL DAMAGE. Focus non-Polymorphed Healers first (small adds), then the big ones. Stop caster DPS when adds gain Magic Reflection.\nHealers: Focus on healing tanks primarily and raid through burst damage from add casts.\nClass Specific: Mages apply start casting Polymorph on your assigned Flamewaker Healers when the pull timer hits zero.\nAdditional Info: Hunter kite your Flamewaker Elite's towards Baron Geddon with your speed Aspect. Avoid unkilled packs, use slowing abilities/pet, and do Feign Death when called for/when needed."
+    		},
+        ["Sorcerer-thane Thaurissan"] = {
+      			["Default"] = "Tanks: MT back towards wall/pillar vs knockback. OT pick mirror at 50%. Both tanks - Center boss on ground marked Rune of Power. Move out of rune (spread) on Rune of Detonation, stay on rune on Rune of Combustion.\nDPS: Focus boss - ignore clone. Back facing wall (knockback). Spread for Detonation out of marking (dont stand on Rune of Power), while during Rune on Combustion move in (stand on Rune of Power).\nHealers: Follow MT and DPS. Move out on Detonation (spread) and move in on marking during Combustion. Care knockback and have back facing wall.\nClass Specific: Quick movement. All classes - not a DPS race. Move out & spread from Rune of Power (marking on ground) when Rune of Detonation. Else stay on and in.\nBoss Ability: Rune of Power on ground - Mark of Detonation (spread and move out), Mark of Combustion (stack and move in), if none (stay in). Mirror add at 50%, knockbacks."
         },
         ["Ragnaros"] = {
             ["Default"] = "Tanks: MT will take boss first, OT move to position if MT is knocked away by Wrath of Ragnaros until MT is back in position. Use maximum Fire Resistance gear (preferably 315 or more).\nMDPS: Melee stack tightly behind the boss. Watch for Wrath of Ragnaros—melee must run out together and not re-enter until the ability is finished and a tank is back in place.\nRDPS: Spread out 10 yards apart around the outside ring to avoid Lava Burst knockbacks. ***Healers have top priority on positions***.\nHealers: Spread out 10 yards apart around the outside ring to avoid Lava Burst knockbacks. Keep tanks topped, especially during Wrath of Ragnaros bursts.\nClass Specific: Retribution Paladins, Melee Hunters, and Enhancement Shamans (all melee mana-users) form a separate melee group to the side of Ragnaros.\nBoss Ability: If Ragnaros submerges (rare), tanks need to pick up and kite adds, DPS kill adds quickly return to positions."
@@ -2287,7 +2590,7 @@ Tactica.DefaultData = {
             ["Default"] = "Tanks: Use three to four tanks to soak Hateful Strike in full mitigation gear, the boss’s primary mechanic. The main tank should maintain threat; off-tanks need high health (~9k+ health) and armor to minimize damage. Tanks must be top 3-4 on threat.\nDPS: Avoid overtaking tanks on threat to reduce the chance of being hit by Hateful Strike. Melee and ranged need to maintain steady DPS while monitoring threat. Non-mana users can dip in the green acid for less health, to avoid accidential strikes.\nHealers: Assign dedicated healers to the tanks only—top them off continuously. Do not heal DPS at all or other healers to ensure tank survival through savage strikes.\nBoss Ability: Hateful Strike hits the highest-health melee player (other than the tank), dealing significant damage. At ~5% health, Patchwerk Enrages, gaining 40% attack speed and increased damage output."
         },
         ["Grobbulus"] = {
-            ["Default"] = "Tanks: Keep Grobbulus facing away from the raid—only the tank should ever be in front to avoid Slime Spray add spawns. Slowly kite the boss around the outer grate of the room, moving after each Poison Cloud is dropped (every ~15s). Pop cooldowns at 30%.\nDPS: Kill Slime adds quickly; cleave them down when they spawn in melee. Stay behind the boss at all times. Avoid being in front to prevent add spawns from Slime Spray.\nHealers: Prepare for burst healing when players receive Mutating Injection—they will run to the side away before being dispelled (do not dispell before). Expect doubled frequency after 30%.\nClass Specific: Dedicate 1x Priest/Paladin to dispel Mutating Injection only after the infected player has moved away out of the raid.\nBoss Ability: Poison Cloud- dropped at boss location every 15s, expands over time, persists indefinitely. Slime Spray - Frontal cone, spawns 1 Slime per player hit. Mutating Injection - Disease explodes after 10s, deals AoE damage—run out of raid."
+            ["Default"] = "Tanks: Keep Grobbulus facing away from the raid—only the tank should ever be in front to avoid Slime Spray add spawns. Slowly kite the boss around the outer grate of the room, moving after each Poison Cloud is dropped (every ~15s). Pop cooldowns at 30%.\nDPS: Kill Slime adds quickly; cleave them down when they spawn in melee. Stay behind the boss at all times. Avoid being in front to prevent add spawns from Slime Spray.\nHealers: Prepare for burst healing when players receive Mutating Injection—they will run to the side away before being dispelled (do not dispel before). Expect doubled frequency after 30%.\nClass Specific: Dedicate 1x Priest/Paladin to dispel Mutating Injection only after the infected player has moved away out of the raid.\nBoss Ability: Poison Cloud- dropped at boss location every 15s, expands over time, persists indefinitely. Slime Spray - Frontal cone, spawns 1 Slime per player hit. Mutating Injection - Disease explodes after 10s, deals AoE damage—run out of raid."
         },
         ["Gluth"] = {
             ["Default"] = "Tanks: Use 1-2 tanks and potentially rotate at 3–4 Mortal Wound stacks (can be done solo). Position boss near door to increase distance from zombies. Another tank can spam Blessing of Kings or shout/howl to get aggro of Zombies and kite them.\nDPS: Focus boss. Assign a kite team for zombies using Frost Trap, Nova, and slows. Do not let zombies reach Gluth post-Decimate or he will heal massively.\nHealers: Maintain tank healing through Mortal Wound debuff. After Decimate, be ready for quick AoE and tank burst heals. HoTs pre-Decimate help survivability.\nClass Specific: Hunters, Paladin, Warrior or/and Mages kite zombies with Frost Trap, Nova, Blessing of Kings, Howl and slows. Priests and Druids pre-cast HoTs before Decimate. Use Fear Ward to avoid zombie fears if applicable.\nBoss Ability: Mortal Wound stacks reduce tank healing. Decimate drops all units to 5% HP. Enrage is removed with Tranquilizing Shot."
@@ -2322,7 +2625,7 @@ Tactica.DefaultData = {
             ["Default"] = "Tanks: Use 2 tanks to rotate for Noxious Breath. Face boss away from raid to avoid breath and tail. Swap before stacks get too high. Position sideways with raid spread loosely around to avoid chain lightning.\nDPS: Spread out to avoid Lightning Wave chaining. At 75/50/25% HP, AoE down Demented Druid Spirits quickly before they spread. Avoid green sleep clouds. Melee stay to boss sides, not front or back.\nHealers: Stay spread to avoid Lightning Wave. Watch for spike damage during add phases. Avoid green sleep clouds. Heal tank swaps early to keep up with threat. Be ready for bursts after breath stacks.\nClass Specific: Classes with AoE should prep for 75/50/25% add waves. Mages, Warlocks, Hunters ideal for Spirit cleanup. Everyone must avoid sleep clouds and keep spread to minimize Lightning Wave bounces.\nBoss Ability: At 75/50/25%, Ysondre spawns one Demented Spirit per player. Lightning Wave chains up to 10 players if too close. Noxious Breath reduces threat and increases ability cooldowns, requires tank swap."
         },
         ["Nerubian Overseer"] = {
-        ["Default"] = "Tanks: MT tanks boss away from water to avoid reset. Periodically move out of poison cloud. Keep boss pathing in quarter-circle toward Tirion. DPS warriors can off-tank spawned adds.\nDPS: Melee stack behind boss, ranged at min range and stay still. Kill adds from web-sprayed players if they spawn. Use frost mages/paladins for web spray immune rotation.\nHealers: Heal through poison nova damage and add spikes. Stand in range group. Cleanse poison quickly with spells, Cleansing Totem, or poison removal items.\nClass Specific: Frost mages rotate Ice Block to immune web spray (2 uses each). Paladins use Divine Shield after mage rotation ends. Warriors can pick up spawned adds. Shamans drop Cleansing Totem.\nBoss Ability: Drops poison clouds (move boss), poison nova, web sprays farthest player every 24s (spawns 4 weak adds), water proximity resets fight."
+			["Default"] = "Tanks: MT tanks boss away from water to avoid reset. Periodically move out of poison cloud. Keep boss pathing in quarter-circle toward Tirion. DPS warriors can off-tank spawned adds.\nDPS: Melee stack behind boss, ranged at min range and stay still. Kill adds from web-sprayed players if they spawn. Use frost mages/paladins for web spray immune rotation.\nHealers: Heal through poison nova damage and add spikes. Stand in range group. Cleanse poison quickly with spells, Cleansing Totem, or poison removal items.\nClass Specific: Frost mages rotate Ice Block to immune web spray (2 uses each). Paladins use Divine Shield after mage rotation ends. Warriors can pick up spawned adds. Shamans drop Cleansing Totem.\nBoss Ability: Drops poison clouds (move boss), poison nova, web sprays farthest player every 24s (spawns 4 weak adds), water proximity resets fight."
 		},
 		["Dark Reaver of Karazhan"] = {
 			["Default"] = "Tanks: MT keeps boss in place. Position so regular adds can be cleaved/AoE'd. Stay aware of class-specific adds spawning on random players—help control them until the correct class can kill.\nDPS: Bring 1+ DPS of each class to handle class-specific adds. Focus your own class add ASAP. Regular adds die to cleave/AoE near boss. Hunters split into 2+ groups to avoid deadzone.\nHealers: Heal through add damage spikes, especially on players targeted by class-specific adds. Stay mobile to avoid getting locked down by adds while keeping tank and raid stable.\nClass Specific: Only your class can damage its class-specific add. All classes may apply CC/debuffs to them. Hunters split to avoid deadzone.\nBoss Ability: Spawns regular adds (AoE down) and class-specific adds (only that class can damage). Class adds spawn on random players. More players = easier fight."
@@ -2347,9 +2650,6 @@ Tactica.DefaultData = {
         ["Solnius"] = {
             ["Default"] = "Tanks: MT pick up the boss first and tank him as he faces in his Night Elf form. OT taunt the boss at 91% as he is untauntable after 90%, and will reset the current tank's threat. During the add phase, pick up all adds and focus on gaining threat on the larger adds. One tank needs to drag any Sanctum Scalebanes out of the raid.\nMDPS: Watch your threat at all times, pulling this boss will wipe the raid. During the add phase, kill only the large adds until the portals are gone. Once the portals are gone, kill all of the whelps.\nRDPS: Watch your threat at all times, pulling this boss will wipe the raid. During the add phase, kill only the large adds until the portals are gone. Once the portals are gone, kill all of the whelps.\nHealers: Watch for spike damage during the add phase or from debuffs. Do not decurse, dispel, or cleanse!\nClass Specific: DO NOT DECURSE, DISPEL, OR CLEANSE ANY DEBUFF AT ANY TIME DURING THIS FIGHT. Doing so will cause the removed debuff to become 3x worse instead of removing it.\nAdd Kill Order: Sanctum Wyrmkin > Sanctum Dragonkin > Sanctum Scalebane > Sanctum Suppressor."
         },
-        ["Hard Mode"] = {
-            ["Default"] = "Tanks: 3 tanks. 1 tanks Erennius out of LoS. 2 tanks on Solnius; both taunt at 91%—he is untauntable below 90%. Face Solnius so DPS hits from side. During add phase, Solnius tanks pick up all adds—priority on large ones.\nDPS: Focus Solnius only. Below 90%, manage threat carefully as he's untauntable. During add phase, kill large adds first. Small whelps keep spawning until all large ones are dead—cleave them down after. Hit from side (not behind, as its a dragon).\nHealers: Assign 3-4 to Erennius tank and to heal each other during sleep. Rest heal Solnius tanks and DPS. No one should decurse, dispel, cleanse or cure—this is crucial to avoid fight-wiping effects.\nClass Specific: Absolutely no decursing, dispelling, cleansing, or curing. This is critical—doing so will trigger mechanics that can wipe the raid.\nBoss Ability: At 50%, Solnius sleeps and adds spawn. Kill adds in order of size—large first, then small. Small whelps will keep spawning until all large adds are dead. Positioning of Erennius is important, use tree/range (think Chomaggus from BWL)."
-        }
     },
     ["Lower Karazhan Halls"] = {
         ["Master Blacksmith Rolfen"] = {
@@ -2373,22 +2673,22 @@ Tactica.DefaultData = {
     },
     ["Upper Karazhan Halls"] = {
 		["Keeper Gnarlmoon"] = {
-        ["Default"] = "Tanks: Max 3 tanks. MT on boss and keep in position facing away. 1 Raven add tank right side (blue). If MT avoids Lunar Shift, no OT (left side) needed.\nDPS: Split DPS evenly. Casters/AoE classes to right (blue debuff), melee to left (red debuff). Nuke boss until 4 owls (all) or Ravens (blue right side) spawn. Bring all owls to ~10% and kill all owls at once. Move out of Lunar Shift AoE—only MT stays in.\nHealers: Evenly split between left and right. Be ready to heal through Lunar Shift and owl spawn damage. Focus on MT healing during shift and when threat resets. Watch for side-switching during debuff swap.\nClass Specific: Casters/range right side (Blue), melee left side (Red). Healers split evenly - needs to be equally many on both. During Lunar Shift, your debuff may switch—adjust sides immediately or risk being silenced or damaged heavily.\nBoss Ability: Lunar Shift deals AoE and may switch debuff color—move out unless you're MT. Owls must die simultaneously. Ravens spawn during fight—aggro reset also occurs, requiring OT to pick up boss fast and reposition."
+			["Default"] = "Tanks: Max 3 tanks. MT on boss and keep in position facing away. 1 Raven add tank right side (blue). If MT avoids Lunar Shift, no OT (left side) needed.\nDPS: Split DPS evenly. Casters/AoE classes to right (blue debuff), melee to left (red debuff). Nuke boss until 4 owls (all) or Ravens (blue right side) spawn. Bring all owls to ~10% and kill all owls at once. Move out of Lunar Shift AoE—only MT stays in.\nHealers: Evenly split between left and right. Be ready to heal through Lunar Shift and owl spawn damage. Focus on MT healing during shift and when threat resets. Watch for side-switching during debuff swap.\nClass Specific: Casters/range right side (Blue), melee left side (Red). Healers split evenly - needs to be equally many on both. During Lunar Shift, your debuff may switch—adjust sides immediately or risk being silenced or damaged heavily.\nBoss Ability: Lunar Shift deals AoE and may switch debuff color—move out unless you're MT. Owls must die simultaneously. Ravens spawn during fight—aggro reset also occurs, requiring OT to pick up boss fast and reposition."
 		},
 		["Lay-Watcher Incantagos"] = {
 			["Default"] = "Tanks: Use 2–5 tanks. MT keeps boss near entrance, facing away. Reposition if AoE drops on MT. Other tanks pick up adds as they spawn. At start 1 tank/per or one by one using Rogue/Hunter kite-vanish/FD tactic from opposite side of the room).\nDPS: Priority: kill Incantagos Affinity (class-specific), then adds, then boss. Avoid Blizzard and AoEs. Stay max range and spread to minimize group damage. Melee must move fast—AoEs tick for 2.5k+ and is likely to be placed due to stacking.\nHealers: Watch for burst during AoEs—especially in melee. Prioritize MT and OT heals otherwise. Be ready for raid-wide spot healing if mechanics overlap.\nClass Specific: Kill Incantagos Affinity immediately when your spell school matches (e.g., Fire, Nature, Physical, etc.). It only takes damage from one school at a time. This is the fight's most critical mechanic.\nBoss Ability: Incantagos spawns damaging AoEs—Missles and Blizzard—often targeting melee. Adds will spawn frequently. Affinity adds must be killed fast, first and only take damage from one specific school per spawn."
 		},
 		["Anomalus"] = {
-			["Default"] = "Tanks: Use 3–4 tanks. Current tank keeps boss near books corner opposite entrance, facing away. Reposition if pool drops on tank. Swap at ~10–12 stacks (Arcane Resistance [AR] leather) or ~20–25 (AR plate). The tank who swaps out always gets the bomb.\nDPS: Melee behind boss, ranged further back forming it's own stacked group. Do not overtake threat—2nd threat always gets bomb. Move from pools and manage positioning carefully to avoid sudden aggro shifts.\nHealers: Stand on stairs opposite entrance—central to all roles. Watch for increasing tank damage as stacks rise. Instantly heal and dispell Arcane Prison, cast randomly.\nClass Specific: 2nd on threat, gets bomb (including prior tanks after switch). DPS normally until 7s left on debuff, then run to a corner (entrance side) to explode. Use resulting debuff to soak pools. A Paladin soaks first pool. DIspell Arcane Prison.\nBoss Ability: All players must have 200+ Arcane Resistance (else wipe). Bomb targets 2nd threat (includes swapped tanks). Pools spawn on randomly—must be soaked by someone with debuff from explotion, else wiping raid."
+			["Default"] = "Tanks: Use 3–4 tanks. Current tank keeps boss near books corner opposite entrance, facing away. Reposition if pool drops on tank. Swap at ~10–12 stacks (Arcane Resistance [AR] leather) or ~20–25 (AR plate). The tank who swaps out always gets the bomb.\nDPS: Melee behind boss, ranged further back forming it's own stacked group. Do not overtake threat—2nd threat always gets bomb. Move from pools and manage positioning carefully to avoid sudden aggro shifts.\nHealers: Stand on stairs opposite entrance—central to all roles. Watch for increasing tank damage as stacks rise. Instantly heal and dispel Arcane Prison, cast randomly.\nClass Specific: 2nd on threat, gets bomb (including prior tanks after switch). DPS normally until 7s left on debuff, then run to a corner (entrance side) to explode. Use resulting debuff to soak pools. A Paladin soaks first pool. DIspell Arcane Prison.\nBoss Ability: All players must have 200+ Arcane Resistance (else wipe). Bomb targets 2nd threat (includes swapped tanks). Pools spawn on randomly—must be soaked by someone with debuff from explotion, else wiping raid."
 		},
 		["Echo of Medivh"] = {
-			["Default"] = "Tanks: MT tanks boss facing away. 3 tanks pick up Infernal at every ~25%, move left, don't stack. Infernal reset threat, charge players—taunt back. Full Fire Resistance gear required for add tanking. If you get a Corruption of Medivh debuff, move away.\nDPS: Only DPS Medivh and Lingering Doom adds. Ignore Infernals. Assigned interrupts only—Shadebolt must be kicked. Overkicking/interuption causes instant casts. Move right if debuffed by Corruption of Medivh. Dodge Flamestrike. Range Spread behind boss.\nHealers: Assign 1 Priest + 1 Paladin to MT. Dispel Arcane Focus ASAP—causes +200% magic dmg. Shadebolt and Flamestrike deal heavy magic burst. Heal through Corruption of Medivh—never dispel it.\nClass Specific: Assign interrupters—Shadebolt is priority. Rogue/Warlock CoT/mind-numbing to increase cast. Priests/Paladins dispel MT's Arcane Focus. Move right if debuffed with Corruption of Medivh and use Restorative Pot at 4 stacks of Doom of Medivh!\nBoss Ability: Shadebolt = lethal, must be kicked. Overkicking = instant casts. Flamestrike targets group—move. Frost Nova roots melee. Corruption of Medivh is fatal if dispelled— Restorative Pot at 4 stacks Doom of Medivh."
+			["Default"] = "Tanks: MT tanks boss facing away. 3 tanks pick up Infernal at every ~25%, move left, don't stack. Infernal reset threat, charge players—taunt back. Full Fire Resistance gear required for add tanking. If you get a Corruption of Medivh debuff, move away.\nDPS: Only DPS Medivh and Lingering Doom adds. Ignore Infernals. Assigned interrupts only—Shadebolt must be kicked. Overkicking/interruption causes instant casts. Move right if debuffed by Corruption of Medivh. Dodge Flamestrike. Range Spread behind boss.\nHealers: Assign 1 Priest + 1 Paladin to MT. Dispel Arcane Focus ASAP—causes +200% magic dmg. Shadebolt and Flamestrike deal heavy magic burst. Heal through Corruption of Medivh—never dispel it.\nClass Specific: Assign interrupters—Shadebolt is priority. Rogue/Warlock CoT/mind-numbing to increase cast. Priests/Paladins dispel MT's Arcane Focus. Move right if debuffed with Corruption of Medivh and use Restorative Pot at 4 stacks of Doom of Medivh!\nBoss Ability: Shadebolt = lethal, must be kicked. Overkicking = instant casts. Flamestrike targets group—move. Frost Nova roots melee. Corruption of Medivh is fatal if dispelled— Restorative Pot at 4 stacks Doom of Medivh."
 		},
 		["King (Chess)"] = {
 			["Default"] = "Tanks: 4-5 tanks. 1 tank picks up Rook (far left), 1 on Bishop (far right), 1 on Knight (close right), and 1-2 tanks also pick up Broken Rook, Decaying Bishop, Mechanical Knight and Pawns. Drag pawns to bosses for cleave. Swap Knight/Bishop tank at end.\nDPS: Kill order: Rook → Bishop → Knight → King. Swap to Pawns as they spawn and cleave them on bosses. LOS King's Holy Nova behind pillars after each boss dies or you will wipe. /bow on Queen's Dark Subservience if you get debuff. Avoid void zones.\nHealers: LOS King's Holy Nova behind pillars when any boss dies. Dispel silence from Bishop. Watch tank on Knight for armor debuff spikes. Prepare for AoE damage from Queen and Bishop. Keep range if not needed in melee.\nClass Specific: Mages/Druids decurse King's curse. All players must /bow in melee on Queen's Subservience or die. Stand behind Knight. LOS Holy Nova (King) when a boss dies. Interrupt/silence as needed. Dispel Bishop silence.\nBoss Ability: King- Holy Nova on each death, void zones, deadly curse. Queen- AoE Shadowbolts, Dark Subservience. Bishop- ST/cleave shadowbolt, silence. Knight- Frontal cleave, armor debuff. Pawns- constant spawn, cleave on boss."
 		},
 		["Sanv Tas'dal"] = {
-			["Default"] = "Tanks: 3–4 tanks. MT holds boss at top of stairs facing away from raid. OT tanks adds from left/right portals when spawned, optional tank for mid portal at melee. During add phase boss untanked; all tanks help kill/tank adds during this phase, prio large.\nDPS: No dispelling to see shades. If you see shades, kill them. All range stand lower level center and DPS prio adds from portals as they spawn, big first. Melee behind boss, but during add phase all on adds at lower center. Move when boss does AoE melee.\nHealers: Stand center lower ground (with range DPS). Heal MT at stairs and OTs at portals. Watch for heavy AoE melee dmg or from add. Do not dispell magic debuff called phase shifted (it reveals shades).\nClass Specific: 2 Hunters rotate Tranq Shot on boss when needed. No one dispell Phase Shifted to keep shades visible. Melee can cleave mid-portal adds at boss.\nBoss Ability: AoE melee dmg—melee move out. Spawns shades only visible with debuff. Add waves from 3 portals, large adds most dangerous. During add phase boss inactive."
+			["Default"] = "Tanks: 3–4 tanks. MT holds boss at top of stairs facing away from raid. OT tanks adds from left/right portals when spawned, optional tank for mid portal at melee. During add phase boss untanked; all tanks help kill/tank adds during this phase, prio large.\nDPS: No dispelling to see shades. If you see shades, kill them. All range stand lower level center and DPS prio adds from portals as they spawn, big first. Melee behind boss, but during add phase all on adds at lower center. Move when boss does AoE melee.\nHealers: Stand center lower ground (with range DPS). Heal MT at stairs and OTs at portals. Watch for heavy AoE melee dmg or from add. Do not dispel magic debuff called phase shifted (it reveals shades).\nClass Specific: 2 Hunters rotate Tranq Shot on boss when needed. No one dispel Phase Shifted to keep shades visible. Melee can cleave mid-portal adds at boss.\nBoss Ability: AoE melee dmg—melee move out. Spawns shades only visible with debuff. Add waves from 3 portals, large adds most dangerous. During add phase boss inactive."
 		},
 		["Kruul"] = {
 			["Default"] = "Tanks: 4–6 tanks. 1-2 front(facing boss at start), 1-2 back(behind boss at start), 1 infernal tank(full FR), 1 add helper if needed. Taunt swap between front/back at 6 stacks (no more). Infernal tank left, DPS right. Boss ignore armor; so stack HP/threat.\nDPS: Ranged on boss only. Melee in front/back groups to soak cleave (~8+tanks in each group). Melee have good health. At 30% after knockback all melee chain LIP shouts/taunts, then die; ranged continues. Ignore infernals. Run out of raid if decurse.\nHealers: Heal tanks/front/back groups. At 30% phase, let melee die after LIP taunt, focus ranged + tanks. 3 assigned decurser that removes decruse only after target moves from raid (left, right, middle).\nClass Specific: Assign 3 decurser for Kruul's curse. Melee tanks use LIP in 30% phase after knockback. Infernal tank uses full FR. Fury prot viable—boss ignores armor.\nBoss Ability: Cleave on front/back groups, stacking debuff (swap at 6). Summons infernals. At 30% gains 4× dmg. Casts decursable curse—must be decursed outside raid (assign 3 decursers - have player move out when getting decursed)."
@@ -2397,7 +2697,7 @@ Tactica.DefaultData = {
 			["Default"] = "Tanks: 5 heavy + 2–3 OT. During P1-2 tanks on boss, 1 per add in corners. Always have a tank 2nd boss threat and 15y away to soak (run in and taunt swap to ensure). During P2-2 tanks per fragment (1+2 threat). 1-2 on Tanks Exiles.\nDPS: During P1 kill adds first. Avoid add death explosions (think Garr adds). Dont overtake 1-2 tank threat. During P2 nuke heart/crystal before full mana+small adds, then fragments to same % - kill at same time. Move away from Flamestrike when announced.\nHealers: Stack center P1-P2 with Range. Watch tank burst + add explosions + Ouro tail damage + Flamestrike. Dispel tank debuffs instantly in P2. Keep OT/soak tanks alive. Heal during kiting trails.\nClass Specific: Moonkin/Warlock to initally get 2nd of threat, away from raid and soak before first adds are dead. Threat control—keep assigned tanks 1+2 on boss/frags. Dispel tanks fast. Avoid trail on ground. Hunters - Vipersting crystal.\nBoss Ability: Adds explode on death, soak mechanic for 2nd threat tank, trail to kite, crystal/heart to mana drain, fragments require dual-threat tanks, Exile spawns. Also Flamestrikes zone to move out from (move during cast to avoid all damage)."
 		},
 		["Mephistroth"] = {
-			["Default"] = "Tanks: 2-3 tanks. MT on boss & doomguard when boss teleports. OT on other doomguard + adds. 3rd or just DPS Paladin helps pick Imps. Drag Nightmare Crawlers & Doomguards away from ranged/healers as they soak mana/AOE. MT usually stationary-face boss away.\nDPS: Prio shards > adds > boss. Kill nightmare crawlers fast, drag from ranged. During shard phase, assigned 4–5 kill each Hellfury Shard in time limit. They spawn in the outter circle, with equal distance. Think of it like a clock.\nHealers: Stack with ranged. Heal shard teams. Watch for fear + burst on tank swap. Assign 2-3 dispellers, to cover shard groups on far side during this ability. Dispell immediately.\nClass Specific: No movement during Shackles—any movement wipes raid. Assigned groups kill Hellfury Shards fast. Drag nightmare crawlers out. Assign a few dispellers to also spread out during shards.\nBoss Ability: Shackles—no one moves or wipe. Hellfury Shards—kill fast. Spawns nightmare crawlers (mana drain) + doomguards. Fears raid. Dispell prio - not dispelling will cause a kills from center."
+			["Default"] = "Tanks: 2-3 tanks. MT on boss & doomguard when boss teleports. OT on other doomguard + adds. 3rd or just DPS Paladin helps pick Imps. Drag Nightmare Crawlers & Doomguards away from ranged/healers as they soak mana/AOE. MT usually stationary-face boss away.\nDPS: Prio shards > adds > boss. Kill nightmare crawlers fast, drag from ranged. During shard phase, assigned 4–5 kill each Hellfury Shard in time limit. They spawn in the outter circle, with equal distance. Think of it like a clock.\nHealers: Stack with ranged. Heal shard teams. Watch for fear + burst on tank swap. Assign 2-3 dispellers, to cover shard groups on far side during this ability. Dispel immediately.\nClass Specific: No movement during Shackles—any movement wipes raid. Assigned groups kill Hellfury Shards fast. Drag nightmare crawlers out. Assign a few dispellers to also spread out during shards.\nBoss Ability: Shackles—no one moves or wipe. Hellfury Shards—kill fast. Spawns nightmare crawlers (mana drain) + doomguards. Fears raid. Dispel prio - not dispelling will cause a kills from center."
 		}
 	},
     ["Onyxia's Lair"] = {
