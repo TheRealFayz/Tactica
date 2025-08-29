@@ -18,7 +18,7 @@ INV.rbAutoRoles   = false
 INV.rbGearEnabled     = false
 INV.rbGearThreshold   = nil
 INV._gearRatings      = INV._gearRatings or {}
-INV._gearTimeoutRemind= true   -- configurable via RB
+INV._gearTimeoutRemind= true
 
 -- flow state
 INV.awaitingRole  = {}
@@ -49,6 +49,9 @@ INV._confirm      = nil
 -- raid conversion intent + reinvite buffer
 INV._convertWhenFirstJoins = false
 INV._pendingReinvites = {}  -- name(lower) -> {name, role, doAssign, skipCapacity}
+-- re-invite helper for "player already in a group"
+INV._recentInvite = INV._recentInvite or {}   -- last invite attempt per player
+INV._groupRetry   = INV._groupRetry   or {}   -- window to auto re-invite on re-whisper
 
 -- UI
 INV.frame         = nil
@@ -160,8 +163,9 @@ local ROLE_KEY = {
   tank="TANK", tanks="TANK", prot="TANK", protection="TANK", shield="TANK", bear="TANK", furyprot="TANK", ot="TANK", mt="TANK",
   heal="HEALER", healer="HEALER", heals="HEALER", resto="HEALER", holy="HEALER", disc="HEALER", discipline="HEALER",
   dps="DPS", dd="DPS", damage="DPS", fury="DPS", arms="DPS", enh="DPS", enhancement="DPS", elemental="DPS", ele="DPS",
-  balance="DPS", boomkin="DPS", moonkin="DPS", shadow="DPS", sp="DPS", cat="DPS", feral="DPS", mm="DPS", marks="DPS", marksmanship="DPS", survival="DPS", bm="DPS", sv="DPS",
-  combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps", rdps="dps", mdps="dps", boomi="dps", boomie="dps"
+  balance="DPS", boomkin="DPS", moonkin="DPS", shadow="DPS", sp="DPS", cat="DPS", feral="DPS", mm="DPS", marks="DPS", marksmanship="DPS", survival="DPS", bm="DPS", sv="DPS", surv="dps",
+  combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps", rdps="dps", mdps="dps", boomi="dps", boomie="dps",
+  ["+tank"]="TANK", ["+heal"]="HEALER", ["+heals"] = "HEALER", ["+dps"] = "DPS"
 }
 
 local CLASS_KEY = {
@@ -487,6 +491,14 @@ local function inviteAndMaybeAssign(name, role, doAssign, skipCapacity)
     EnsureRaidMode("pre-invite")
   end
 
+-- Remember last attempted invite details (for re-invite if they were grouped)
+	INV._recentInvite[lower(name)] = {
+	  name        = name,
+	  role        = role,
+	  doAssign    = doAssign and true or false,
+	  skipCapacity= skipCapacity and true or false,
+	  ts          = now(),
+	}
   -- Proceed with invite now
   inviteByName(name)
 
@@ -1031,6 +1043,14 @@ end
 local function onWhisper(author, msg)
   author = cleanName(author or "")
   if INV._sessionIgnores[lower(author)] then return end
+ 
+ -- If they tripped the "already in a group" check earlier and re-whispered within 90s, re-invite immediately using the same parameters as before.
+  local gr = INV._groupRetry[lower(author)]
+  if gr and now() <= (gr.untilT or 0) then
+    inviteAndMaybeAssign(author, gr.role, gr.doAssign, gr.skipCapacity)
+    INV._groupRetry[lower(author)] = nil
+    return
+  end
 
   if INV.enabled then
     handleActive(author, msg, INV.keyword, INV.autoAssign, false)
@@ -1212,6 +1232,7 @@ INV._evt:RegisterEvent("RAID_ROSTER_UPDATE")
 INV._evt:RegisterEvent("ADDON_LOADED")
 INV._evt:RegisterEvent("PARTY_MEMBERS_CHANGED")
 INV._evt:RegisterEvent("PARTY_LEADER_CHANGED")
+INV._evt:RegisterEvent("CHAT_MSG_SYSTEM")
 INV._evt:SetScript("OnEvent", function()
   if event == "ADDON_LOADED" and arg1 == "Tactica" then
     return
@@ -1221,6 +1242,36 @@ INV._evt:SetScript("OnEvent", function()
     author = cleanName(author)
     if onWhisperReply(author, msg) then return end
     onWhisper(author, msg)
+
+  elseif event == "CHAT_MSG_SYSTEM" then
+    local sys = arg1 or ""
+
+    -- Try localized match first, then English fallback
+    local who
+    if ERR_ALREADY_IN_GROUP_S then
+      local patt = string.gsub(ERR_ALREADY_IN_GROUP_S, "%%s", "(.+)")
+      who = string.match(sys, patt)
+    end
+    if not who then
+      -- English fallback: "<name> is already in a group."
+      who = string.match(sys, "^(.-) is already in a group%.?$")
+    end
+
+    if who and who ~= "" then
+      local name = cleanName(who)
+
+      -- Tell them what to do
+      say(name, "[Tactica]: You are in group - please leave and write to me again.")
+
+      -- Open a 90s auto re-invite window, remembering what we attempted
+      local ri = INV._recentInvite[lower(name)]
+      INV._groupRetry[lower(name)] = {
+        untilT       = now() + AWAIT_SEC,            -- 90 seconds
+        role         = ri and ri.role or nil,
+        doAssign     = ri and ri.doAssign or false,
+        skipCapacity = ri and ri.skipCapacity or false,
+      }
+    end
 
   elseif event == "PARTY_MEMBERS_CHANGED" or event == "PARTY_LEADER_CHANGED" then
     TryConvertToRaid("roster-event", 6)
