@@ -1370,11 +1370,11 @@ function INV.Open()
     f:SetClampedToScreen(true)
 
   local title = f:CreateFontString(nil,"OVERLAY","GameFontNormalLarge")
-  title:SetPoint("TOP", f, "TOP", 0, -12)
+  title:SetPoint("TOP", f, "TOP", 0, -16)
   title:SetText("Auto Invite")
 
   local lbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  lbl:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -36)
+  lbl:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -45)
   lbl:SetText("Select keyword:")
 
   local e = CreateFrame("EditBox", "TacticaInviteKeyword", f, "InputBoxTemplate")
@@ -1389,7 +1389,7 @@ function INV.Open()
 
   local cb = CreateFrame("CheckButton", "TacticaInviteAutoAssign", f, "UICheckButtonTemplate")
   INV.ui.cb = cb
-  cb:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 0, -10)
+  cb:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 0, -5)
   cb:SetWidth(20); cb:SetHeight(20)
   getglobal("TacticaInviteAutoAssignText"):SetText("Auto-assign roles")
   cb:SetChecked(true)
