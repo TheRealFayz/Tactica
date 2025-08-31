@@ -25,8 +25,7 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 - `/tt rolewhisper` toggle the role whisper function on/off (same as the checkbox in **/tt options**).
 - `/tt autoinvite` or `/ttai` for standalone auto-invite frame, with auto-assign roles functionality.
 <img width="492" height="327" alt="Tactica - Roster" src="https://github.com/user-attachments/assets/991708d0-b30d-402f-9eff-57cb767b9859" />
-<img width="320" height="145" alt="image" src="https://github.com/user-attachments/assets/b1c080b2-65b2-4f29-a976-92789a05aca7" />
-
+<img width="322" height="145" alt="image" src="https://github.com/user-attachments/assets/708926de-70be-45ff-a640-c5ae77d6ab8c" />
 
 ### 3. Build Raids (LFM poster/creator)
 - Select raid, size and setup and Tactica will do the rest. Creating a seamless LFM message, to post in your channels.
