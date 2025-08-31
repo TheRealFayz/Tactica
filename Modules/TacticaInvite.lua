@@ -199,6 +199,38 @@ local function tokenize(msg)
   return t, s
 end
 
+-- normalize a string for keyword comparisons (letters/+ only, single spaces, trimmed, lowercased)
+local function normalize_for_kw(s)
+  s = lower(s or "")
+  s = string.gsub(s, "[^%a%+]+", " ")
+  s = string.gsub(s, "%s+", " ")
+  s = trim(s)
+  return s
+end
+
+-- keyword hit that supports single-word OR multi-word phrases (and "+")
+local function kw_hit(msg, kw)
+  kw = kw or ""
+  if kw == "" then return false end
+  if kw == "+" then
+    -- accept any '+' anywhere in the raw message
+    return string.find(msg or "", "%+") ~= nil
+  end
+  local rawNorm = normalize_for_kw(msg)
+  local kwNorm  = normalize_for_kw(kw)
+  if string.find(kwNorm, " ") then
+    -- phrase: match on whole-word boundaries by padding spaces
+    local hay    = " " .. rawNorm .. " "
+    local needle = " " .. kwNorm .. " "
+    return string.find(hay, needle, 1, true) ~= nil
+  else
+    -- single word: keep the old token semantics
+    local toks = select(1, tokenize(msg))
+    for i=1,table.getn(toks) do if toks[i] == kwNorm then return true end end
+    return false
+  end
+end
+
 -- detect both role and an optional class hint (even when role was explicit)
 local function detectRoleAndClass(tokens)
   local roleFound, classFound = nil, nil
@@ -678,22 +710,20 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
 
   local tokens, raw = tokenize(msg)
 
-  -- Hit detection:
+  -- Hit detection (supports single-word, "+", and multi-word phrases)
   local kw = trim(keyword or "")
   local hit = false
   if rbMode then
-    if kw ~= "" and kw ~= "+" then
-      for i=1,table.getn(tokens) do if tokens[i]==lower(kw) then hit=true; break end end
-    elseif kw == "+" then
-      if string.find(raw, "%+") then hit=true end
+    if kw ~= "" then
+      hit = kw_hit(msg, kw)
     else
+      -- RB can run keywordless based on intent (role/class/invite words)
       hit = hasIntent(tokens)
     end
   else
-    if kw ~= "" and kw ~= "+" then
-      for j=1,table.getn(tokens) do if tokens[j]==lower(kw) then hit=true; break end end
-    elseif kw == "+" then
-      if string.find(raw, "%+") then hit=true end
+    -- Standalone requires a keyword (word, "+", or phrase)
+    if kw ~= "" then
+      hit = kw_hit(msg, kw)
     end
   end
   if not hit then return end
@@ -736,7 +766,7 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
       inviteAndMaybeAssign(author, rolePicked, true, false)
       return
     end
-    local prompt = "Tactica: What role are you? ("..RoleLettersToPrompt(allowed)..")"
+    local prompt = "[Tactica]: What role are you? ("..RoleLettersToPrompt(allowed)..")"
     say(author, prompt)
     INV.awaitingRole[author] = now() + AWAIT_SEC
     INV.awaitCtx[author]     = "active"
@@ -749,7 +779,7 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
 
   -- Standalone path unchanged beyond here
   if offered and table.getn(offered) >= 2 then
-    local prompt = "Tactica: What role are you? ("..RoleLettersToPrompt(allowed).."). Please reply with ONE role only."
+    local prompt = "[Tactica]: What role are you? ("..RoleLettersToPrompt(allowed).."). Please reply with ONE role only."
     say(author, prompt)
     INV.awaitingRole[author] = now() + AWAIT_SEC
     INV.awaitCtx[author]     = "active-single"
@@ -766,7 +796,7 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
     return
   end
 
-  local prompt = "Tactica: What role are you? ("..RoleLettersToPrompt(allowed).."). Please reply with ONE role only."
+  local prompt = "[Tactica]: What role are you? ("..RoleLettersToPrompt(allowed).."). Please reply with ONE role only."
   say(author, prompt)
   INV.awaitingRole[author] = now() + AWAIT_SEC
   INV.awaitCtx[author]     = "active-single"
@@ -1371,8 +1401,8 @@ function INV.Open()
   local off = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   INV.ui.off = off
   off:SetWidth(70); off:SetHeight(20)
-  off:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 10)
-  off:SetText("Hide")  -- optional: clearer than "Close"
+  off:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 13)
+  off:SetText("Hide")
 	off:SetScript("OnClick", function()
 	  f:Hide()
 	  if INV.enabled then
@@ -1383,7 +1413,7 @@ function INV.Open()
   local go = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   INV.ui.btn = go
   go:SetWidth(110); go:SetHeight(20)
-  go:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
+  go:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 13)
   go:SetText("Enable")
 	go:SetScript("OnClick", function()
 	  if INV.enabled then
