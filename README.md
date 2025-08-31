@@ -23,7 +23,10 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 - pfUI (optional): Tactica’s Tank role also flags pfUI’s tank role when pfUI is present (requires SuperWoW).
 - `/tt roles` to post the assigned and number of tanks, healers and DPS, respectively, to the raid.
 - `/tt rolewhisper` toggle the role whisper function on/off (same as the checkbox in **/tt options**).
+- `/tt autoinvite` or `/ttai` for standalone auto-invite frame, with auto-assign roles functionality.
 <img width="492" height="327" alt="Tactica - Roster" src="https://github.com/user-attachments/assets/991708d0-b30d-402f-9eff-57cb767b9859" />
+<img width="320" height="145" alt="image" src="https://github.com/user-attachments/assets/b1c080b2-65b2-4f29-a976-92789a05aca7" />
+
 
 ### 3. Build Raids (LFM poster/creator)
 - Select raid, size and setup and Tactica will do the rest. Creating a seamless LFM message, to post in your channels.
@@ -33,7 +36,6 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 - Auto-invite/auto-assign/auto-gearcheck, all built-in to ease the pain.
 - `/tt build` for the LFM/raid builder UI.
 - `/tt lfm` posts once using your current Builder settings and respects a 30s cooldown (shared with the “Announce” button).
-- `/tt autoinvite` or `/ttai` for standalone auto-invite frame, with auto-assign roles functionality.
 <img width="595" height="665" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/3e04ce83-9fb9-4cf2-a017-8fd88e8cdcb3" />
 
 ### 4. Loot mode QoL for bosses
