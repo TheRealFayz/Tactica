@@ -349,6 +349,10 @@ function TacticaRaidBuilder.NotifyRoleAssignmentChanged()
   RB.RefreshPreview()
 end
 
+function TacticaRaidBuilder.AutoRolesEnabled()
+  return RB and RB.cbRoleAssign and RB.cbRoleAssign:GetChecked() and true or false
+end
+
 -- Passive change detector (also catches changes without explicit notifier)
 RB._roleSig = ""
 RB._rolesWatch = RB._rolesWatch or CreateFrame("Frame")
@@ -463,16 +467,19 @@ local function BuildLFM(raidLabelForMsg, raidSize, tanksWant, healersWant, srsWa
   local freeTxt= (freeText and freeText ~= "") and (" - " .. freeText) or ""
 
   local head
-  if hideNeed then
-    head = "LFM for " .. raidLabelForMsg .. sumTxt
-  else
-    head = "LF" .. needM .. "M for " .. raidLabelForMsg .. sumTxt
-  end
+-- If hideNeed OR needM==0, show plain "LFM"
+	if hideNeed or needM == 0 then
+	  head = "LFM for " .. raidLabelForMsg .. sumTxt
+	else
+	  head = "LF" .. needM .. "M for " .. raidLabelForMsg .. sumTxt
+	end
 
   local msg = head .. " - " .. srTxt .. " > MS > OS" .. hrTxt .. needStr .. freeTxt
   if string.len(msg) <= 255 then return msg end
 
-  local shortHead = (hideNeed and ("LFM@"..raidLabelForMsg..sumTxt)) or ("LF"..needM.."M@"..raidLabelForMsg..sumTxt)
+  local shortHead = (hideNeed or needM == 0)
+	  and ("LFM@" .. raidLabelForMsg .. sumTxt)
+	  or  ("LF" .. needM .. "M@" .. raidLabelForMsg .. sumTxt)
   local msg2  = shortHead .. " - " .. srTxt .. ">MS>OS" .. hrTxt .. needStr .. freeTxt
   if string.len(msg2) <= 255 then return msg2 end
   local msg3  = shortHead .. " " .. srTxt .. hrTxt .. needStr .. freeTxt
@@ -635,6 +642,7 @@ function RB.ApplySaved()
   RB.state.chWorld  = S.chWorld and true or false
   RB.state.chLFG    = S.chLFG   and true or false
   RB.state.chYell   = S.chYell  and true or false
+  RB.state.aiAutoRoles  = S.aiAutoRoles  and true or false
   RB.state.interval = (S.interval == 60 or S.interval == 120 or S.interval == 300) and S.interval or 120
 
   RB.state.auto     = false
@@ -656,6 +664,7 @@ function RB.SaveState()
   S.auto, S.interval = st.auto, st.interval
   S.gearScale = st.gearScale
   S.autoGear  = st.autoGear
+  S.aiAutoRoles  = st.aiAutoRoles  and true or false
 end
 
 local function RequirementsComplete()
@@ -723,43 +732,30 @@ local function RB_SetInvitePlaceholder(on)
   end
 end
 
-local function RB_AutoInviteUpdateFromUI()
-  local enabled   = RB.cbAutoInvite and RB.cbAutoInvite:GetChecked()
+local function RB_AutoInviteUpdateFromUI(source)
+  local enabled   = RB.cbAutoInvite and RB.cbAutoInvite:GetChecked() and true or false
   local autoRoles = RB.cbRoleAssign and RB.cbRoleAssign:GetChecked() and true or false
 
-  -- sync to invite module: keywordless RB mode
+  -- sync to invite module (RB intent mode, no keyword)
   if TacticaInvite and TacticaInvite.SetFromRB then
-    if enabled then
-      TacticaInvite.SetFromRB(true, "", autoRoles)  -- empty keyword => intent-based trigger
-    else
-      TacticaInvite.SetFromRB(false, "", autoRoles)
+    TacticaInvite.SetFromRB(enabled, "", autoRoles)
+  end
+
+  -- self-messages: only for the one that changed
+  local cf = DEFAULT_CHAT_FRAME or ChatFrame1
+  if cf then
+    if (enabled ~= RB._aiEnabledLast) and (source == "autoInvite" or source == nil) then
+      cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Invite " ..
+        (enabled and "|cff00ff00ENABLED|r" or "|cffff5555DISABLED|r") .. " (Raid Builder).")
+    end
+    if (autoRoles ~= RB._aiAutoRolesLast) and (source == "autoRoles" or source == nil) then
+      cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Assign roles " ..
+        (autoRoles and "|cff00ff00ENABLED|r" or "|cffff5555DISABLED|r") .. " (Raid Builder).")
     end
   end
 
-  -- messages
-  if enabled ~= RB._aiEnabledLast then
-    RB._aiEnabledLast = enabled and true or false
-    local cf = DEFAULT_CHAT_FRAME or ChatFrame1
-    if cf then
-      if enabled then
-        cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Invite |cff00ff00ENABLED|r (Raid Builder).")
-      else
-        cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Invite |cffff5555DISABLED|r (Raid Builder).")
-      end
-    end
-  end
-
-  if autoRoles ~= RB._aiAutoRolesLast then
-    RB._aiAutoRolesLast = autoRoles and true or false
-    local cf = DEFAULT_CHAT_FRAME or ChatFrame1
-    if cf then
-      if autoRoles then
-        cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Assign roles |cff00ff00ENABLED|r (Raid Builder).")
-      else
-        cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Assign roles |cffff5555DISABLED|r (Raid Builder).")
-      end
-    end
-  end
+  RB._aiEnabledLast     = enabled and true or false
+  RB._aiAutoRolesLast   = autoRoles and true or false
 end
 
 local function RB_SyncInviteExtras()
@@ -1258,6 +1254,7 @@ end
 local function OnClearClick()
   TacticaDB.Builder = {}
   RB.ApplySaved()
+
   UIDropDownMenu_SetText(RB.state.raid or "Select Raid", RB.ddRaid)
   UIDropDownMenu_SetText("Select Size", RB.ddSize); if RB.editCustomSize then RB.editCustomSize:Hide() end
   UIDropDownMenu_SetText("Pick Size first", RB.ddTanks)
@@ -1265,14 +1262,38 @@ local function OnClearClick()
   UIDropDownMenu_SetText("0 SR", RB.ddSRs)
   UIDropDownMenu_SetText(RB.state.worldBoss or "Pick Boss", RB.ddWBoss)
   UIDropDownMenu_SetText(RB.state.esMode or "Select Mode", RB.ddESMode)
+
   RB.cbWorld:SetChecked(RB.state.chWorld)
   RB.cbLFG:SetChecked(RB.state.chLFG)
   RB.cbYell:SetChecked(RB.state.chYell)
-  RB.cbAuto:SetChecked(false); RB.state.auto=false; RB.state.running=false; RB._warnOk=false; RB._nextSend=nil; RB.UpdateButtonsForRunning()
+
+  -- STOP AUTO-ANNOUNCE (must keep this)
+  if RB.cbAuto then RB.cbAuto:SetChecked(false) end
+  RB.state.auto = false
+  RB.state.running = false
+  RB._warnOk = false
+  RB._nextSend = nil
+  RB.UpdateButtonsForRunning()
+
+  -- STOP AUTO-INVITE and AUTO-ASSIGN ROLES
+  if RB.cbAutoInvite then RB.cbAutoInvite:SetChecked(false) end
+  if RB.cbRoleAssign then RB.cbRoleAssign:SetChecked(false) end
+  RB.state.aiAutoRoles = false
+  RB_AutoInviteUpdateFromUI("clear")
+
   RB.cbCanSum:SetChecked(RB.state.canSum)
   if RB.cbHideNeed then RB.cbHideNeed:SetChecked(RB.state.hideNeed) end
   RB.editHR:SetText(RB.state.hr or "")
   RB.editFree:SetText(RB.state.free or "")
+
+  -- Reset Gearcheck UI and state
+  RB.state.gearScale = nil
+  RB.state.autoGear = false
+  if RB.cbGear then RB.cbGear:SetChecked(false) end
+  if RB.ddGearScale then UIDropDownMenu_SetText("Required Gear", RB.ddGearScale) end
+  if RB.InitGearScaleDropdown then RB.InitGearScaleDropdown() end
+
+  RB.SaveState()
   RB.RefreshPreview()
   RB_SyncInviteExtras()
 end
@@ -1638,20 +1659,25 @@ function RB.Open()
   sep3:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -330)
   sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.25) end
 
-  -- Auto role assignment checkbox (RB-side)
-  RB.cbRoleAssign = CreateFrame("CheckButton", "TacticaRBRoleAssign", f, "UICheckButtonTemplate")
-  RB.cbRoleAssign:SetWidth(20); RB.cbRoleAssign:SetHeight(20)
-  RB.cbRoleAssign:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -340)
-  getglobal("TacticaRBRoleAssignText"):SetText("Auto-Assign")
-  RB.cbRoleAssign:SetChecked(false)
-  RB.cbRoleAssign:SetScript("OnClick", function() RB_AutoInviteUpdateFromUI() end)
+-- Auto-Assign
+RB.cbRoleAssign = CreateFrame("CheckButton", "TacticaRBRoleAssign", f, "UICheckButtonTemplate")
+RB.cbRoleAssign:SetWidth(20); RB.cbRoleAssign:SetHeight(20)
+RB.cbRoleAssign:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -340)
+getglobal("TacticaRBRoleAssignText"):SetText("Auto-Assign")
+RB.cbRoleAssign:SetChecked(RB.state.aiAutoRoles and true or false)
+RB.cbRoleAssign:SetScript("OnClick", function()
+  RB.state.aiAutoRoles = this:GetChecked() and true or false
+  RB.SaveState()
+  RB_AutoInviteUpdateFromUI("autoRoles")
+end)
 
-  -- Auto-Invite checkbox (no keyword, intent-based)
-  RB.cbAutoInvite = CreateFrame("CheckButton", "TacticaRBAutoInvite", f, "UICheckButtonTemplate")
-  RB.cbAutoInvite:SetWidth(20); RB.cbAutoInvite:SetHeight(20)
-  RB.cbAutoInvite:SetPoint("LEFT", RB.cbRoleAssign, "RIGHT", 70, 0)
-  getglobal("TacticaRBAutoInviteText"):SetText("Auto-Invite")
-  RB.cbAutoInvite:SetScript("OnClick", function() RB_AutoInviteUpdateFromUI() end)
+-- Auto-Invite
+RB.cbAutoInvite = CreateFrame("CheckButton", "TacticaRBAutoInvite", f, "UICheckButtonTemplate")
+RB.cbAutoInvite:SetWidth(20); RB.cbAutoInvite:SetHeight(20)
+RB.cbAutoInvite:SetPoint("LEFT", RB.cbRoleAssign, "RIGHT", 70, 0)
+getglobal("TacticaRBAutoInviteText"):SetText("Auto-Invite")
+RB.cbAutoInvite:SetScript("OnClick", function()
+RB_AutoInviteUpdateFromUI("autoInvite") end)
 
   -- Gear Scale dropdown (right of Auto-Invite)
   RB.ddGearScale = CreateFrame("Frame", "TacticaRBGearScale", f, "UIDropDownMenuTemplate")
@@ -1710,8 +1736,8 @@ function RB.Open()
   RB.lblGear:SetWidth(200); RB.lblGear:SetJustifyH("LEFT")
   RB.lblGear:SetText("|cffffd100Auto-Gearcheck|r")
 
+  -- How-it-works + list (no "enabled" line here)
   local function PrintGearHowItWorks()
-    RB_Print("|cff33ff99[Tactica]:|r Auto-Gearcheck enabled.")
     RB_Print("|cff33ff99[Tactica]:|r Players will be asked to grade their gear from 0 to 5. They may reply with a number (e.g. '2') or a range (e.g. '2-3'). Ranges use the average; 1-3 = 2 while 1-2 = 1 (0.5 rounds down).")
     RB_Print("|cff33ff99[Tactica]:|r Grade Gear Scale:")
     RB_Print("|cff33ff99[Tactica]:|r 0 – Starter / Dungeon blues")
@@ -1721,18 +1747,39 @@ function RB.Open()
     RB_Print("|cff33ff99[Tactica]:|r 4 – Naxx / T3")
     RB_Print("|cff33ff99[Tactica]:|r 5 – Kara40 / T3.5")
   end
+  -- Final full-green enabled line
+  local function PrintGearEnabled()
+    RB_Print("|cff33ff99[Tactica]:|r Auto-Gearcheck |cff00ff00ENABLED|r.")
+  end
 
-  RB.cbGear:SetScript("OnClick", function()
-    RB.state.autoGear = this:GetChecked() and true or false
+RB.cbGear:SetScript("OnClick", function()
+  local prev = RB.state.autoGear and true or false
+  local want = this:GetChecked() and true or false
+
+  -- Försök enable utan vald scale -> stoppa och visa endast hur-det-funkar + kravtext
+  if want and RB.state.gearScale == nil then
+    this:SetChecked(false)
+    RB.state.autoGear = false
     RB.SaveState()
     RB_SyncInviteExtras()
-    if RB.state.autoGear then
-      if RB.state.gearScale == nil then
-        RB_Print("|cffff6666[Tactica]:|r Pick a Scale to use with Auto-Gearcheck.")
-      end
-      PrintGearHowItWorks()
-    end
-  end)
+    PrintGearHowItWorks()
+    RB_Print("|cffff6666[Tactica]:|r You need to select |cffffff00Required Gear|r (minimum gear scale) before enabling Auto-Gearcheck.")
+    return
+  end
+
+  RB.state.autoGear = want
+  RB.SaveState()
+  RB_SyncInviteExtras()
+
+  if want and not prev then
+    -- Aktivt slagit på -> visa hur-det-funkar + ENABLED
+    PrintGearHowItWorks()
+    PrintGearEnabled()
+  elseif (not want) and prev then
+    -- Aktivt slagit av -> visa DISABLED (precis som Auto-Invite/Auto-Assign)
+    RB_Print("|cff33ff99[Tactica]:|r Auto-Gearcheck |cffff5555DISABLED|r.")
+  end
+end)
 
   -- Grey note explaining Auto-Assign vs Auto-Invite
   RB.lblAIExplain = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
