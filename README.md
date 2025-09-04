@@ -33,6 +33,7 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 - Select Yell, LFG or/and World to post in - set optional "Auto-announce".
 - Syncs with raid roster, so when you assign a role - the LFM announcement will adjust accordingly.
 - Auto-invite/auto-assign/auto-gearcheck, all built-in to ease the pain.
+- Post Discord & SR links during formation.
 - `/tt build` for the LFM/raid builder UI.
 - `/tt lfm` posts once using your current Builder settings and respects a 30s cooldown (shared with the “Announce” button).
 <img width="595" height="719" alt="image" src="https://github.com/user-attachments/assets/9e626051-85bd-496e-b7be-75f91d2c70df" />
