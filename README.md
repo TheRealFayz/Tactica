@@ -35,7 +35,7 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 - Auto-invite/auto-assign/auto-gearcheck, all built-in to ease the pain.
 - `/tt build` for the LFM/raid builder UI.
 - `/tt lfm` posts once using your current Builder settings and respects a 30s cooldown (shared with the “Announce” button).
-<img width="595" height="665" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/3e04ce83-9fb9-4cf2-a017-8fd88e8cdcb3" />
+<img width="595" height="719" alt="image" src="https://github.com/user-attachments/assets/9e626051-85bd-496e-b7be-75f91d2c70df" />
 
 ### 4. Loot mode QoL for bosses
 - Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). (same as the checkbox in **/tt options**).
