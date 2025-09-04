@@ -1,4 +1,4 @@
--- TacticaInvite.lua - Auto-invite/role assign/gearcheck for Turtle WoW
+-- TacticaInvite.lua - Auto-invite/role assign/gearcheck for "vanilla"-compliant versions of Wow
 -- Created by Doite
 
 local INV = {}

@@ -1,4 +1,4 @@
--- TacticaRaidBuilder.lua - Raid/LFM Builder with Auto-Announcer for Turtle WoW
+-- TacticaRaidBuilder.lua - Raid/LFM Builder with Auto-Announcer for "vanilla"-compliant versions of Wow
 -- Created by Doite
 
 -------------------------------------------------

@@ -1,4 +1,4 @@
--- Tactica.lua - Boss strategy helper for Turtle WoW
+-- Tactica.lua - Boss strategy helper addon for "vanilla"-compliant versions of Wow
 -- Created by Doite
 
 -------------------------------------------------
@@ -590,7 +590,7 @@ function Tactica:CanAutoPost()
     for i = 1, 40 do
         local name, rank = GetRaidRosterInfo(i)
         if name and name == playerName then
-            -- Rank 2 is leader, rank 1 is assist in TWoW
+            -- Rank 2 is leader, rank 1 is assist
             isLeader = (rank == 2)
             isAssist = (rank == 1)
             break

@@ -1,4 +1,4 @@
--- TacticaRaidRoles.lua - Boss raid setup helper for Turtle WoW
+-- TacticaRaidRoles.lua - Boss raid setup helper for "vanilla"-compliant versions of Wow
 -- Created by Doite
 
 ------------------------------------------------------------
