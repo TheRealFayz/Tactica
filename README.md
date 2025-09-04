@@ -52,14 +52,14 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 
 ## Installation
 1.  Navigate to your World of Warcraft installation folder.
-2.  Go into the `WoW` -> `Interface` -> `AddOns` directory.
+2.  Go into the `Interface` -> `AddOns` directory.
 3.  Place the `Tactica` folder directly into the `AddOns` folder.
 4.  Restart World of Warcraft completely.
 
-Alternatively just take add this link and add to the Turtle WoW launcher (addon tab -> Add new addon) or similarly with GithubAddonsManager: https://github.com/Player-Doite/tactica
+Alternatively just take add this link and add to the launcher (addon tab -> Add new addon) or similarly with GithubAddonsManager: https://github.com/Player-Doite/tactica
 
 ## Contact
-Addon, logic and default tactics all made by Doite. Contact me in-game, github via "Issues" or via TWoW discord if something is wrong.
+Addon, logic and default tactics all made by Doite. Contact me in-game, github via "Issues" or via discord if something is wrong.
 
 _Other debug commands are:_
 
