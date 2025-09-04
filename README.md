@@ -20,7 +20,7 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 ### 2. Organize your comp at a glance
 - Right-click raid roster to Toggle as Healer / DPS / Tank. Roles sync to everyone running Tactica; latest leader/assist decision wins.
 - Clean indicators next to names (H/D/T).
-- pfUI (optional): Tactica’s Tank role also flags pfUI’s tank role when pfUI is present (requires SuperWoW).
+- pfUI (optional): Tactica’s Tank role also flags the vanilla-compliant pfUI addon’s tank role when pfUI is present (requires SuperWoW).
 - `/tt roles` to post the assigned and number of tanks, healers and DPS, respectively, to the raid.
 - `/tt rolewhisper` toggle the role whisper function on/off (same as the checkbox in **/tt options**).
 - `/tt autoinvite` or `/ttai` for standalone auto-invite frame, with auto-assign roles functionality.
