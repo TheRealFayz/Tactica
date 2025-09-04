@@ -67,6 +67,7 @@ local function RB_SnapshotForPreset()
     interval  = RB.state.interval,
     gearScale = RB.state.gearScale,
     autoGear  = RB.state.autoGear and true or false,
+    discordLink = RB.state.discordLink or "",
   }
 end
 
@@ -112,7 +113,7 @@ local BuilderDefaults = {
     notes={ dispel=2, cleanse=2, decurse=4, tranq=0, purge=0, sheep=2, banish=0, shackle=0, sleep=0, fear=2 }
   },
   ["Ruins of Ahn'Qiraj"] = {
-    size=20, tanks=2, healers=4, srs=1,
+    size=20, tanks=2, healers=4, srs=2,
     notes={ dispel=2, cleanse=2, decurse=2, tranq=1, purge=0, sheep=0, banish=0, shackle=0, sleep=0, fear=0 }
   },
   ["Temple of Ahn'Qiraj"] = {
@@ -286,6 +287,8 @@ RB.state = RB.state or {
   chWorld=false, chLFG=false, chYell=false,
   auto=false, interval=120, running=false,
   gearScale=nil, autoGear=false,
+  srLink="",           -- session-only
+  discordLink="",      -- only saved via presets
 }
 RB.frame = RB.frame or nil
 RB.ddRaid, RB.ddWBoss, RB.ddESMode, RB.ddSize = nil, nil, nil, nil
@@ -298,6 +301,10 @@ RB.btnAnnounce, RB.btnSelf, RB.btnRaid, RB.btnClear, RB.btnClose = nil, nil, nil
 RB.lockButton = nil
 RB._warnOk, RB._confirm = false, nil
 RB._lastManual = 0
+
+-- SR/Discord UI
+RB.editSRLink, RB.editDiscordLink, RB.btnSRDPost = nil, nil, nil
+RB.titleSRD, RB.sepSRD = nil, nil
 
 -- Auto-Invite controls (RB-driven; not saved)
 RB.cbAutoInvite = nil
@@ -649,6 +656,10 @@ function RB.ApplySaved()
   RB.state.running  = false
   RB._warnOk        = false
   RB._nextSend      = nil
+
+  -- SR link is session-only; Discord link is not saved in Builder (only in presets)
+  RB.state.srLink = ""
+  RB.state.discordLink = RB.state.discordLink or ""
 end
 
 function RB.SaveState()
@@ -665,6 +676,7 @@ function RB.SaveState()
   S.gearScale = st.gearScale
   S.autoGear  = st.autoGear
   S.aiAutoRoles  = st.aiAutoRoles  and true or false
+  -- Intentionally NOT saving srLink or discordLink in the general Builder save
 end
 
 local function RequirementsComplete()
@@ -1043,6 +1055,8 @@ RB._evt:SetScript("OnEvent", function()
     RB._dirty = true
     RB.RefreshPreview()
 
+    if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
+
     if (ev == "RAID_ROSTER_UPDATE" or ev == "GROUP_ROSTER_UPDATE") and RB.state.auto and RB.state.running then
       local inRaid = RB_RaidCount()
       if inRaid > (RB._lastRaidCount or 0) then
@@ -1293,6 +1307,13 @@ local function OnClearClick()
   if RB.ddGearScale then UIDropDownMenu_SetText("Required Gear", RB.ddGearScale) end
   if RB.InitGearScaleDropdown then RB.InitGearScaleDropdown() end
 
+  -- Clear SR & Discord fields (session)
+  RB.state.srLink = ""
+  RB.state.discordLink = ""
+  if RB.editSRLink then RB.editSRLink:SetText("") end
+  if RB.editDiscordLink then RB.editDiscordLink:SetText("") end
+  if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
+
   RB.SaveState()
   RB.RefreshPreview()
   RB_SyncInviteExtras()
@@ -1325,13 +1346,22 @@ local function OpenRaidPanel()
   end
 end
 
+-- Leader/assist check for SR/Discord Post
+local function RB_IsLeaderOrAssist()
+  if IsRaidLeader and IsRaidLeader() then return true end
+  if IsRaidOfficer and IsRaidOfficer() then return true end
+  if IsRaidAssistant and IsRaidAssistant() then return true end
+  if IsPartyLeader and IsPartyLeader() then return true end
+  return false
+end
+
 function RB.Open()
-  if RB.frame then RB.frame:Show(); ApplyLockIcon(); RB.RefreshPreview(); RB_SyncInviteExtras(); return end
+  if RB.frame then RB.frame:Show(); ApplyLockIcon(); RB.RefreshPreview(); RB_SyncInviteExtras(); if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end; return end
   RB.ApplySaved()
 
   local f = CreateFrame("Frame", "TacticaRaidBuilderFrame", UIParent)
   RB.frame = f
-  f:SetWidth(480); f:SetHeight(530)
+  f:SetWidth(480); f:SetHeight(580)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   f:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -1756,7 +1786,6 @@ RB.cbGear:SetScript("OnClick", function()
   local prev = RB.state.autoGear and true or false
   local want = this:GetChecked() and true or false
 
-  -- Försök enable utan vald scale -> stoppa och visa endast hur-det-funkar + kravtext
   if want and RB.state.gearScale == nil then
     this:SetChecked(false)
     RB.state.autoGear = false
@@ -1772,38 +1801,113 @@ RB.cbGear:SetScript("OnClick", function()
   RB_SyncInviteExtras()
 
   if want and not prev then
-    -- Aktivt slagit på -> visa hur-det-funkar + ENABLED
     PrintGearHowItWorks()
     PrintGearEnabled()
   elseif (not want) and prev then
-    -- Aktivt slagit av -> visa DISABLED (precis som Auto-Invite/Auto-Assign)
     RB_Print("|cff33ff99[Tactica]:|r Auto-Gearcheck |cffff5555DISABLED|r.")
   end
 end)
 
   -- Grey note explaining Auto-Assign vs Auto-Invite
   RB.lblAIExplain = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblAIExplain:SetPoint("BOTTOMLEFT", RB.cbRoleAssign, "BOTTOMLEFT", 0, -17)
+  RB.lblAIExplain:SetPoint("BOTTOMLEFT", RB.cbRoleAssign, "BOTTOMLEFT", 0, -20)
   RB.lblAIExplain:SetWidth(450); RB.lblAIExplain:SetJustifyH("LEFT")
   if RB.lblAIExplain.SetTextColor then RB.lblAIExplain:SetTextColor(0.7,0.7,0.7) end
   RB.lblAIExplain:SetText("Note: Auto-Assign will auto-set roles in raid roster. Auto-Invite will invite on intent.")
-  
+ 
+
+  -- SR & DISCORD SECTION
+  RB.titleSRD = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  RB.titleSRD:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -395)
+  RB.titleSRD:SetText("|cff33ff99SR & DISCORD|r")
+
+  RB.sepSRD = f:CreateTexture(nil, "ARTWORK")
+  RB.sepSRD:SetHeight(1)
+  RB.sepSRD:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -410)
+  RB.sepSRD:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -410)
+  RB.sepSRD:SetTexture(1, 1, 1); if RB.sepSRD.SetVertexColor then RB.sepSRD:SetVertexColor(1, 1, 1, 0.25) end
+
+  local lblSRLink = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  lblSRLink:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -420)
+  lblSRLink:SetText("SR link:")
+
+  RB.editSRLink = CreateFrame("EditBox", "TacticaRBSRLink", f, "InputBoxTemplate")
+  RB.editSRLink:SetPoint("LEFT", lblSRLink, "RIGHT", 6, 0)
+  RB.editSRLink:SetAutoFocus(false); RB.editSRLink:SetWidth(100); RB.editSRLink:SetHeight(20)
+  RB.editSRLink:SetMaxLetters(200)
+  RB.editSRLink:SetText(RB.state.srLink or "")
+  RB.editSRLink:SetScript("OnTextChanged", function()
+    RB.state.srLink = this:GetText() or ""
+    if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
+  end)
+
+  local lblDiscord = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  lblDiscord:SetPoint("LEFT", RB.editSRLink, "RIGHT", 10, 0)
+  lblDiscord:SetText("Discord link:")
+
+  RB.editDiscordLink = CreateFrame("EditBox", "TacticaRBDcLink", f, "InputBoxTemplate")
+  RB.editDiscordLink:SetPoint("LEFT", lblDiscord, "RIGHT", 6, 0)
+  RB.editDiscordLink:SetAutoFocus(false); RB.editDiscordLink:SetWidth(100); RB.editDiscordLink:SetHeight(20)
+  RB.editDiscordLink:SetMaxLetters(200)
+  RB.editDiscordLink:SetText(RB.state.discordLink or "")
+  RB.editDiscordLink:SetScript("OnTextChanged", function()
+    RB.state.discordLink = this:GetText() or ""
+    if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
+  end)
+
+  RB.btnSRDPost = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+  RB.btnSRDPost:SetWidth(50); RB.btnSRDPost:SetHeight(20)
+  RB.btnSRDPost:SetPoint("LEFT", RB.editDiscordLink, "RIGHT", 8, 0)
+  RB.btnSRDPost:SetText("Post")
+
+  local function RB_PostSRDiscord()
+    local sr = RB_Trim(RB.state.srLink or "")
+    local dc = RB_Trim(RB.state.discordLink or "")
+    if sr == "" and dc == "" then return end
+    if not RB_IsLeaderOrAssist() then
+      RB_Print("|cffff6666[Tactica]:|r You must be raid leader or assist to post raid warnings.")
+      return
+    end
+    if sr ~= "" then
+      SendChatMessage("[Tactica] - SR link: " .. sr, "RAID_WARNING")
+    end
+    if dc ~= "" then
+      SendChatMessage("[Tactica] - Join Discord: " .. dc, "RAID_WARNING")
+    end
+  end
+  RB.btnSRDPost:SetScript("OnClick", RB_PostSRDiscord)
+
+  function RB.UpdateSRDPostState()
+    if not RB.btnSRDPost then return end
+    local sr = RB_Trim(RB.state.srLink or "")
+    local dc = RB_Trim(RB.state.discordLink or "")
+    local hasAny = (sr ~= "" or dc ~= "")
+    local can = RB_IsLeaderOrAssist()
+    if hasAny and can then
+      RB.btnSRDPost:Enable(); RB.btnSRDPost:SetAlpha(1.0)
+    else
+      RB.btnSRDPost:Disable(); RB.btnSRDPost:SetAlpha(0.5)
+    end
+  end
+
   local sep4 = f:CreateTexture(nil, "ARTWORK")
   sep4:SetHeight(1)
-  sep4:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -385)
-  sep4:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -385)
+  sep4:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -445)
+  sep4:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -445)
   sep4:SetTexture(1, 1, 1); if sep4.SetVertexColor then sep4:SetVertexColor(1, 1, 1, 0.25) end
 
+  -- END SR & DISCORD SECTION 
+
   RB.lblNotes = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblNotes:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -395)
+  RB.lblNotes:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -455)
   RB.lblNotes:SetWidth(450); RB.lblNotes:SetJustifyH("LEFT"); RB.lblNotes:SetText("")
 
   RB.lblPreview = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblPreview:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -420)
+  RB.lblPreview:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -480)
   RB.lblPreview:SetWidth(450); RB.lblPreview:SetJustifyH("LEFT"); RB.lblPreview:SetText("|cff33ff99Preview:|r ")
 
   RB.lblHint = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblHint:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -465)
+  RB.lblHint:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -515)
   RB.lblHint:SetWidth(450); RB.lblHint:SetJustifyH("LEFT")
   RB.lblHint:SetText("|cffffd100Note:|r |cff999999Assign roles (Tank / Healer / DPS) to players in the Raid Roster (hotkey: "
     .. (RaidRosterHotkey() or "unbound") .. ") to auto-adjust the LFM announcement.|r")
@@ -1912,6 +2016,7 @@ function RB.LoadPreset(name)
   RB.state.interval    = (p.interval == 60 or p.interval == 120 or p.interval == 300) and p.interval or 120
   RB.state.gearScale   = p.gearScale
   RB.state.autoGear    = p.autoGear and true or false
+  RB.state.discordLink = p.discordLink or ""
 
   if RB.state.raid == "World Bosses" then RB.ddWBoss:Show(); RB.ddESMode:Hide()
   elseif RB.state.raid == "Emerald Sanctum" then RB.ddESMode:Show(); RB.ddWBoss:Hide()
@@ -1941,6 +2046,8 @@ function RB.LoadPreset(name)
   if RB.cbHideNeed then RB.cbHideNeed:SetChecked(RB.state.hideNeed) end
   if RB.editHR  then RB.editHR:SetText(RB.state.hr or "") end
   if RB.editFree then RB.editFree:SetText(RB.state.free or "") end
+  if RB.editDiscordLink then RB.editDiscordLink:SetText(RB.state.discordLink or "") end
+  if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
   RB.InitGearScaleDropdown()
 
   RB.SaveState()
