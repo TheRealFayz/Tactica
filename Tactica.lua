@@ -257,6 +257,11 @@ function Tactica:RegisterBossAliases(raidName, bossName, aliases, when)
   end
 end
 
+-- Kara10: Moroes friendly → Moroes hostile
+Tactica:RegisterBossAliases("Lower Karazhan Halls", "Moroes", {
+  "Moroes",
+}, "friendly")
+
 -- ZG: Vilebranch Speaker (attack to trigger boss) → Bloodlord Mandokir
 Tactica:RegisterBossAliases("Zul'Gurub", "Bloodlord Mandokir", {
   "Vilebranch Speaker",
