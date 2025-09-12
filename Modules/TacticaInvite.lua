@@ -1,4 +1,4 @@
--- TacticaInvite.lua - Auto-invite/role assign/gearcheck for Turtle WoW
+-- TacticaInvite.lua - Auto-invite/role assign/gearcheck for "vanilla"-compliant versions of Wow
 -- Created by Doite
 
 local INV = {}
@@ -197,6 +197,38 @@ local function tokenize(msg)
   local t = {}
   for w in string.gmatch(s, "%S+") do table.insert(t, w) end
   return t, s
+end
+
+-- normalize a string for keyword comparisons (letters/+ only, single spaces, trimmed, lowercased)
+local function normalize_for_kw(s)
+  s = lower(s or "")
+  s = string.gsub(s, "[^%a%+]+", " ")
+  s = string.gsub(s, "%s+", " ")
+  s = trim(s)
+  return s
+end
+
+-- keyword hit that supports single-word OR multi-word phrases (and "+")
+local function kw_hit(msg, kw)
+  kw = kw or ""
+  if kw == "" then return false end
+  if kw == "+" then
+    -- accept any '+' anywhere in the raw message
+    return string.find(msg or "", "%+") ~= nil
+  end
+  local rawNorm = normalize_for_kw(msg)
+  local kwNorm  = normalize_for_kw(kw)
+  if string.find(kwNorm, " ") then
+    -- phrase: match on whole-word boundaries by padding spaces
+    local hay    = " " .. rawNorm .. " "
+    local needle = " " .. kwNorm .. " "
+    return string.find(hay, needle, 1, true) ~= nil
+  else
+    -- single word: keep the old token semantics
+    local toks = select(1, tokenize(msg))
+    for i=1,table.getn(toks) do if toks[i] == kwNorm then return true end end
+    return false
+  end
 end
 
 -- detect both role and an optional class hint (even when role was explicit)
@@ -491,22 +523,21 @@ local function inviteAndMaybeAssign(name, role, doAssign, skipCapacity)
     EnsureRaidMode("pre-invite")
   end
 
--- Remember last attempted invite details (for re-invite if they were grouped)
-	INV._recentInvite[lower(name)] = {
-	  name        = name,
-	  role        = role,
-	  doAssign    = doAssign and true or false,
-	  skipCapacity= skipCapacity and true or false,
-	  ts          = now(),
-	}
+  -- Remember last attempted invite details (for re-invite if they were grouped)
+  INV._recentInvite[lower(name)] = {
+    name        = name,
+    role        = role,
+    doAssign    = doAssign and true or false,
+    skipCapacity= skipCapacity and true or false,
+    ts          = now(),
+  }
+
   -- Proceed with invite now
   inviteByName(name)
 
+  -- Only keep pending role assignment; do not whisper "Invited" at all.
   if doAssign and role then
     INV.pendingRoles[name] = role
-    say(name, "[Tactica]: Invited. I will mark your role once you join.")
-  else
-    say(name, "[Tactica]: Invited.")
   end
 end
 
@@ -567,7 +598,7 @@ local AWAIT_GEAR_SEC   = 90
 local function GearLine(n)
   if n==0 then return "0 – Starter / Dungeon blues" end
   if n==1 then return "1 – ZG / AQ20 / MC" end
-  if n==2 then return "2 – BWL / ES / Kara10" end
+  if n==2 then return "2 – BWL / T2" end
   if n==3 then return "3 – AQ40 / T2.5" end
   if n==4 then return "4 – Naxx / T3" end
   if n==5 then return "5 – Kara40 / T3.5" end
@@ -583,7 +614,7 @@ local function GearLabelOnly(n)
   return ""
 end
 
--- fresh or stale-session-safe gear prompt
+-- fresh or stale-session gear prompt
 local function StartGearcheck(name)
   if not INV.rbGearEnabled or INV.rbGearThreshold == nil then return false end
   local tNow = now()
@@ -597,11 +628,10 @@ local function StartGearcheck(name)
 
   -- (re)start full prompt (handles stale session where _gearAsked was set but timer expired)
   INV._gearAsked[name] = true
-  local intro = "[Tactica]: Gearcheck – please grade the MAJORITY of your gear (9+/18 itemslots) using the scale below. Reply only with a single number (e.g. '2') or a range (e.g. '2-3')."
+  local intro = "[Tactica]: Gearcheck – please grade the MAJORITY of your gear (9+/18 itemslots) using the scale below. Reply only with a single number (e.g. '2' or '3') or a range (e.g. '2-3')."
   say(name, intro)
-  for i=0,5 do
-    say(name, "[Tactica]: " .. GearLine(i))
-  end
+  -- Compressed scale into a single summary line
+  say(name, "[Tactica]: (0)=Blues / (1)=ZG-AQ20-MC / (2)=BWL-T2 / (3)=AQ40-T2.5 / (4)=Naxx-T3 / (5)=K40-T3.5")
   INV.awaitingGear[name] = tNow + AWAIT_GEAR_SEC
   return true
 end
@@ -680,22 +710,20 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
 
   local tokens, raw = tokenize(msg)
 
-  -- Hit detection:
+  -- Hit detection (supports single-word, "+", and multi-word phrases)
   local kw = trim(keyword or "")
   local hit = false
   if rbMode then
-    if kw ~= "" and kw ~= "+" then
-      for i=1,table.getn(tokens) do if tokens[i]==lower(kw) then hit=true; break end end
-    elseif kw == "+" then
-      if string.find(raw, "%+") then hit=true end
+    if kw ~= "" then
+      hit = kw_hit(msg, kw)
     else
+      -- RB can run keywordless based on intent (role/class/invite words)
       hit = hasIntent(tokens)
     end
   else
-    if kw ~= "" and kw ~= "+" then
-      for j=1,table.getn(tokens) do if tokens[j]==lower(kw) then hit=true; break end end
-    elseif kw == "+" then
-      if string.find(raw, "%+") then hit=true end
+    -- Standalone requires a keyword (word, "+", or phrase)
+    if kw ~= "" then
+      hit = kw_hit(msg, kw)
     end
   end
   if not hit then return end
@@ -738,7 +766,7 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
       inviteAndMaybeAssign(author, rolePicked, true, false)
       return
     end
-    local prompt = "Tactica: What role are you? ("..RoleLettersToPrompt(allowed)..")"
+    local prompt = "[Tactica]: What role are you? ("..RoleLettersToPrompt(allowed)..")"
     say(author, prompt)
     INV.awaitingRole[author] = now() + AWAIT_SEC
     INV.awaitCtx[author]     = "active"
@@ -751,7 +779,7 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
 
   -- Standalone path unchanged beyond here
   if offered and table.getn(offered) >= 2 then
-    local prompt = "Tactica: What role are you? ("..RoleLettersToPrompt(allowed).."). Please reply with ONE role only."
+    local prompt = "[Tactica]: What role are you? ("..RoleLettersToPrompt(allowed).."). Please reply with ONE role only."
     say(author, prompt)
     INV.awaitingRole[author] = now() + AWAIT_SEC
     INV.awaitCtx[author]     = "active-single"
@@ -768,7 +796,7 @@ local function handleActive(author, msg, keyword, autoAssign, rbMode)
     return
   end
 
-  local prompt = "Tactica: What role are you? ("..RoleLettersToPrompt(allowed).."). Please reply with ONE role only."
+  local prompt = "[Tactica]: What role are you? ("..RoleLettersToPrompt(allowed).."). Please reply with ONE role only."
   say(author, prompt)
   INV.awaitingRole[author] = now() + AWAIT_SEC
   INV.awaitCtx[author]     = "active-single"
@@ -1235,7 +1263,21 @@ INV._evt:RegisterEvent("PARTY_LEADER_CHANGED")
 INV._evt:RegisterEvent("CHAT_MSG_SYSTEM")
 INV._evt:SetScript("OnEvent", function()
   if event == "ADDON_LOADED" and arg1 == "Tactica" then
-    return
+  -- Sync RB -> Invite flags on reload
+  local S = TacticaDB and TacticaDB.Builder
+  INV.rbEnabled     = false                    -- keep auto-invite OFF unless RB toggles it
+  INV.rbKeyword     = ""
+  INV.rbAutoRoles   = (S and S.aiAutoRoles) and true or false
+
+  -- Gearcheck to persist across reloads (optional):
+  if S and S.autoGear and S.gearScale ~= nil then
+    INV.rbGearEnabled   = true
+    INV.rbGearThreshold = S.gearScale
+  else
+    INV.rbGearEnabled   = false
+    INV.rbGearThreshold = nil
+  end
+  return
 
   elseif event == "CHAT_MSG_WHISPER" then
     local msg, author = arg1, arg2
@@ -1263,7 +1305,7 @@ INV._evt:SetScript("OnEvent", function()
       -- Tell them what to do
       say(name, "[Tactica]: You are in group - please leave and write to me again.")
 
-      -- Open a 90s auto re-invite window, remembering what we attempted
+      -- Open a 90s auto re-invite window, remembering what was attempted
       local ri = INV._recentInvite[lower(name)]
       INV._groupRetry[lower(name)] = {
         untilT       = now() + AWAIT_SEC,            -- 90 seconds
@@ -1328,11 +1370,11 @@ function INV.Open()
     f:SetClampedToScreen(true)
 
   local title = f:CreateFontString(nil,"OVERLAY","GameFontNormalLarge")
-  title:SetPoint("TOP", f, "TOP", 0, -12)
+  title:SetPoint("TOP", f, "TOP", 0, -16)
   title:SetText("Auto Invite")
 
   local lbl = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  lbl:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -36)
+  lbl:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -45)
   lbl:SetText("Select keyword:")
 
   local e = CreateFrame("EditBox", "TacticaInviteKeyword", f, "InputBoxTemplate")
@@ -1347,7 +1389,7 @@ function INV.Open()
 
   local cb = CreateFrame("CheckButton", "TacticaInviteAutoAssign", f, "UICheckButtonTemplate")
   INV.ui.cb = cb
-  cb:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 0, -10)
+  cb:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 0, -5)
   cb:SetWidth(20); cb:SetHeight(20)
   getglobal("TacticaInviteAutoAssignText"):SetText("Auto-assign roles")
   cb:SetChecked(true)
@@ -1359,29 +1401,43 @@ function INV.Open()
   local off = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   INV.ui.off = off
   off:SetWidth(70); off:SetHeight(20)
-  off:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 10)
-  off:SetText("Close")
-  off:SetScript("OnClick", function() f:Hide() end)
+  off:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 13)
+  off:SetText("Hide")
+	off:SetScript("OnClick", function()
+	  f:Hide()
+	  if INV.enabled then
+		cfmsg("Auto-Invite (standalone) is still running in the background. Use /ttai or /tt autoinvite to reopen.")
+	  end
+	end)
 
   local go = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
   INV.ui.btn = go
   go:SetWidth(110); go:SetHeight(20)
-  go:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 10)
+  go:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -12, 13)
   go:SetText("Enable")
-  go:SetScript("OnClick", function()
-    if INV.enabled then
-      INV.enabled = false
-      INV.awaitingRole = {}; INV.awaitCtx = {}; INV.pendingRoles = {}
-      go:SetText("Enable")
-      cfmsg("Auto-Invite disabled.")
-    else
-      local kw = e:GetText() or ""
-      if isPH(e) or trim(kw)=="" then cfmsg("|cffff5555Please enter a keyword before enabling.|r"); return end
-      INV.keyword = trim(kw); INV.enabled = true
-      go:SetText("Disable")
-      cfmsg("Auto-Invite enabled (keyword: |cffffff00"..INV.keyword.."|r).")
-    end
-  end)
+	go:SetScript("OnClick", function()
+	  if INV.enabled then
+		INV.enabled = false
+		INV.awaitingRole, INV.awaitCtx, INV.pendingRoles = {}, {}, {}
+		go:SetText("Enable")
+		cfmsg("Auto-Invite (standalone) disabled.")
+	  else
+		local kw = e:GetText() or ""
+		if isPH(e) or trim(kw)=="" then
+		  cfmsg("|cffff5555Please enter a keyword before enabling.|r"); return
+		end
+		INV.keyword = trim(kw)
+		INV.enabled = true
+		go:SetText("Disable")
+		cfmsg(string.format(
+		  "Auto-Invite (standalone) enabled (keyword: |cffffff00%s|r). " ..
+		  "It will run in the background even if you close this window. " ..
+		  "Auto-assign roles: %s.",
+		  INV.keyword,
+		  (INV.autoAssign and "|cff00ff00ON|r" or "|cffff5555OFF|r")
+		))
+	  end
+	end)
 end
 
 -- slash

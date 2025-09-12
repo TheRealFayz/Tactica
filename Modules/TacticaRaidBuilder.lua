@@ -1,4 +1,4 @@
--- TacticaRaidBuilder.lua - Raid/LFM Builder with Auto-Announcer for Turtle WoW
+-- TacticaRaidBuilder.lua - Raid/LFM Builder with Auto-Announcer for "vanilla"-compliant versions of Wow
 -- Created by Doite
 
 -------------------------------------------------
@@ -67,6 +67,7 @@ local function RB_SnapshotForPreset()
     interval  = RB.state.interval,
     gearScale = RB.state.gearScale,
     autoGear  = RB.state.autoGear and true or false,
+    discordLink = RB.state.discordLink or "",
   }
 end
 
@@ -112,7 +113,7 @@ local BuilderDefaults = {
     notes={ dispel=2, cleanse=2, decurse=4, tranq=0, purge=0, sheep=2, banish=0, shackle=0, sleep=0, fear=2 }
   },
   ["Ruins of Ahn'Qiraj"] = {
-    size=20, tanks=2, healers=4, srs=1,
+    size=20, tanks=2, healers=4, srs=2,
     notes={ dispel=2, cleanse=2, decurse=2, tranq=1, purge=0, sheep=0, banish=0, shackle=0, sleep=0, fear=0 }
   },
   ["Temple of Ahn'Qiraj"] = {
@@ -286,6 +287,8 @@ RB.state = RB.state or {
   chWorld=false, chLFG=false, chYell=false,
   auto=false, interval=120, running=false,
   gearScale=nil, autoGear=false,
+  srLink="",           -- session-only
+  discordLink="",      -- only saved via presets
 }
 RB.frame = RB.frame or nil
 RB.ddRaid, RB.ddWBoss, RB.ddESMode, RB.ddSize = nil, nil, nil, nil
@@ -298,6 +301,10 @@ RB.btnAnnounce, RB.btnSelf, RB.btnRaid, RB.btnClear, RB.btnClose = nil, nil, nil
 RB.lockButton = nil
 RB._warnOk, RB._confirm = false, nil
 RB._lastManual = 0
+
+-- SR/Discord UI
+RB.editSRLink, RB.editDiscordLink, RB.btnSRDPost = nil, nil, nil
+RB.titleSRD, RB.sepSRD = nil, nil
 
 -- Auto-Invite controls (RB-driven; not saved)
 RB.cbAutoInvite = nil
@@ -347,6 +354,10 @@ end
 function TacticaRaidBuilder.NotifyRoleAssignmentChanged()
   RB._dirty = true
   RB.RefreshPreview()
+end
+
+function TacticaRaidBuilder.AutoRolesEnabled()
+  return RB and RB.cbRoleAssign and RB.cbRoleAssign:GetChecked() and true or false
 end
 
 -- Passive change detector (also catches changes without explicit notifier)
@@ -463,16 +474,19 @@ local function BuildLFM(raidLabelForMsg, raidSize, tanksWant, healersWant, srsWa
   local freeTxt= (freeText and freeText ~= "") and (" - " .. freeText) or ""
 
   local head
-  if hideNeed then
-    head = "LFM for " .. raidLabelForMsg .. sumTxt
-  else
-    head = "LF" .. needM .. "M for " .. raidLabelForMsg .. sumTxt
-  end
+-- If hideNeed OR needM==0, show plain "LFM"
+	if hideNeed or needM == 0 then
+	  head = "LFM for " .. raidLabelForMsg .. sumTxt
+	else
+	  head = "LF" .. needM .. "M for " .. raidLabelForMsg .. sumTxt
+	end
 
   local msg = head .. " - " .. srTxt .. " > MS > OS" .. hrTxt .. needStr .. freeTxt
   if string.len(msg) <= 255 then return msg end
 
-  local shortHead = (hideNeed and ("LFM@"..raidLabelForMsg..sumTxt)) or ("LF"..needM.."M@"..raidLabelForMsg..sumTxt)
+  local shortHead = (hideNeed or needM == 0)
+	  and ("LFM@" .. raidLabelForMsg .. sumTxt)
+	  or  ("LF" .. needM .. "M@" .. raidLabelForMsg .. sumTxt)
   local msg2  = shortHead .. " - " .. srTxt .. ">MS>OS" .. hrTxt .. needStr .. freeTxt
   if string.len(msg2) <= 255 then return msg2 end
   local msg3  = shortHead .. " " .. srTxt .. hrTxt .. needStr .. freeTxt
@@ -635,12 +649,17 @@ function RB.ApplySaved()
   RB.state.chWorld  = S.chWorld and true or false
   RB.state.chLFG    = S.chLFG   and true or false
   RB.state.chYell   = S.chYell  and true or false
+  RB.state.aiAutoRoles  = S.aiAutoRoles  and true or false
   RB.state.interval = (S.interval == 60 or S.interval == 120 or S.interval == 300) and S.interval or 120
 
   RB.state.auto     = false
   RB.state.running  = false
   RB._warnOk        = false
   RB._nextSend      = nil
+
+  -- SR link is session-only; Discord link is not saved in Builder (only in presets)
+  RB.state.srLink = ""
+  RB.state.discordLink = RB.state.discordLink or ""
 end
 
 function RB.SaveState()
@@ -656,6 +675,8 @@ function RB.SaveState()
   S.auto, S.interval = st.auto, st.interval
   S.gearScale = st.gearScale
   S.autoGear  = st.autoGear
+  S.aiAutoRoles  = st.aiAutoRoles  and true or false
+  -- Intentionally NOT saving srLink or discordLink in the general Builder save
 end
 
 local function RequirementsComplete()
@@ -723,43 +744,30 @@ local function RB_SetInvitePlaceholder(on)
   end
 end
 
-local function RB_AutoInviteUpdateFromUI()
-  local enabled   = RB.cbAutoInvite and RB.cbAutoInvite:GetChecked()
+local function RB_AutoInviteUpdateFromUI(source)
+  local enabled   = RB.cbAutoInvite and RB.cbAutoInvite:GetChecked() and true or false
   local autoRoles = RB.cbRoleAssign and RB.cbRoleAssign:GetChecked() and true or false
 
-  -- sync to invite module: keywordless RB mode
+  -- sync to invite module (RB intent mode, no keyword)
   if TacticaInvite and TacticaInvite.SetFromRB then
-    if enabled then
-      TacticaInvite.SetFromRB(true, "", autoRoles)  -- empty keyword => intent-based trigger
-    else
-      TacticaInvite.SetFromRB(false, "", autoRoles)
+    TacticaInvite.SetFromRB(enabled, "", autoRoles)
+  end
+
+  -- self-messages: only for the one that changed
+  local cf = DEFAULT_CHAT_FRAME or ChatFrame1
+  if cf then
+    if (enabled ~= RB._aiEnabledLast) and (source == "autoInvite" or source == nil) then
+      cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Invite " ..
+        (enabled and "|cff00ff00ENABLED|r" or "|cffff5555DISABLED|r") .. " (Raid Builder).")
+    end
+    if (autoRoles ~= RB._aiAutoRolesLast) and (source == "autoRoles" or source == nil) then
+      cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Assign roles " ..
+        (autoRoles and "|cff00ff00ENABLED|r" or "|cffff5555DISABLED|r") .. " (Raid Builder).")
     end
   end
 
-  -- messages
-  if enabled ~= RB._aiEnabledLast then
-    RB._aiEnabledLast = enabled and true or false
-    local cf = DEFAULT_CHAT_FRAME or ChatFrame1
-    if cf then
-      if enabled then
-        cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Invite |cff00ff00ENABLED|r (Raid Builder).")
-      else
-        cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Invite |cffff5555DISABLED|r (Raid Builder).")
-      end
-    end
-  end
-
-  if autoRoles ~= RB._aiAutoRolesLast then
-    RB._aiAutoRolesLast = autoRoles and true or false
-    local cf = DEFAULT_CHAT_FRAME or ChatFrame1
-    if cf then
-      if autoRoles then
-        cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Assign roles |cff00ff00ENABLED|r (Raid Builder).")
-      else
-        cf:AddMessage("|cff33ff99[Tactica]:|r Auto-Assign roles |cffff5555DISABLED|r (Raid Builder).")
-      end
-    end
-  end
+  RB._aiEnabledLast     = enabled and true or false
+  RB._aiAutoRolesLast   = autoRoles and true or false
 end
 
 local function RB_SyncInviteExtras()
@@ -1047,6 +1055,8 @@ RB._evt:SetScript("OnEvent", function()
     RB._dirty = true
     RB.RefreshPreview()
 
+    if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
+
     if (ev == "RAID_ROSTER_UPDATE" or ev == "GROUP_ROSTER_UPDATE") and RB.state.auto and RB.state.running then
       local inRaid = RB_RaidCount()
       if inRaid > (RB._lastRaidCount or 0) then
@@ -1258,6 +1268,7 @@ end
 local function OnClearClick()
   TacticaDB.Builder = {}
   RB.ApplySaved()
+
   UIDropDownMenu_SetText(RB.state.raid or "Select Raid", RB.ddRaid)
   UIDropDownMenu_SetText("Select Size", RB.ddSize); if RB.editCustomSize then RB.editCustomSize:Hide() end
   UIDropDownMenu_SetText("Pick Size first", RB.ddTanks)
@@ -1265,14 +1276,45 @@ local function OnClearClick()
   UIDropDownMenu_SetText("0 SR", RB.ddSRs)
   UIDropDownMenu_SetText(RB.state.worldBoss or "Pick Boss", RB.ddWBoss)
   UIDropDownMenu_SetText(RB.state.esMode or "Select Mode", RB.ddESMode)
+
   RB.cbWorld:SetChecked(RB.state.chWorld)
   RB.cbLFG:SetChecked(RB.state.chLFG)
   RB.cbYell:SetChecked(RB.state.chYell)
-  RB.cbAuto:SetChecked(false); RB.state.auto=false; RB.state.running=false; RB._warnOk=false; RB._nextSend=nil; RB.UpdateButtonsForRunning()
+
+  -- STOP AUTO-ANNOUNCE (must keep this)
+  if RB.cbAuto then RB.cbAuto:SetChecked(false) end
+  RB.state.auto = false
+  RB.state.running = false
+  RB._warnOk = false
+  RB._nextSend = nil
+  RB.UpdateButtonsForRunning()
+
+  -- STOP AUTO-INVITE and AUTO-ASSIGN ROLES
+  if RB.cbAutoInvite then RB.cbAutoInvite:SetChecked(false) end
+  if RB.cbRoleAssign then RB.cbRoleAssign:SetChecked(false) end
+  RB.state.aiAutoRoles = false
+  RB_AutoInviteUpdateFromUI("clear")
+
   RB.cbCanSum:SetChecked(RB.state.canSum)
   if RB.cbHideNeed then RB.cbHideNeed:SetChecked(RB.state.hideNeed) end
   RB.editHR:SetText(RB.state.hr or "")
   RB.editFree:SetText(RB.state.free or "")
+
+  -- Reset Gearcheck UI and state
+  RB.state.gearScale = nil
+  RB.state.autoGear = false
+  if RB.cbGear then RB.cbGear:SetChecked(false) end
+  if RB.ddGearScale then UIDropDownMenu_SetText("Required Gear", RB.ddGearScale) end
+  if RB.InitGearScaleDropdown then RB.InitGearScaleDropdown() end
+
+  -- Clear SR & Discord fields (session)
+  RB.state.srLink = ""
+  RB.state.discordLink = ""
+  if RB.editSRLink then RB.editSRLink:SetText("") end
+  if RB.editDiscordLink then RB.editDiscordLink:SetText("") end
+  if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
+
+  RB.SaveState()
   RB.RefreshPreview()
   RB_SyncInviteExtras()
 end
@@ -1304,13 +1346,22 @@ local function OpenRaidPanel()
   end
 end
 
+-- Leader/assist check for SR/Discord Post
+local function RB_IsLeaderOrAssist()
+  if IsRaidLeader and IsRaidLeader() then return true end
+  if IsRaidOfficer and IsRaidOfficer() then return true end
+  if IsRaidAssistant and IsRaidAssistant() then return true end
+  if IsPartyLeader and IsPartyLeader() then return true end
+  return false
+end
+
 function RB.Open()
-  if RB.frame then RB.frame:Show(); ApplyLockIcon(); RB.RefreshPreview(); RB_SyncInviteExtras(); return end
+  if RB.frame then RB.frame:Show(); ApplyLockIcon(); RB.RefreshPreview(); RB_SyncInviteExtras(); if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end; return end
   RB.ApplySaved()
 
   local f = CreateFrame("Frame", "TacticaRaidBuilderFrame", UIParent)
   RB.frame = f
-  f:SetWidth(480); f:SetHeight(530)
+  f:SetWidth(480); f:SetHeight(580)
   f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
   f:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -1638,20 +1689,25 @@ function RB.Open()
   sep3:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -330)
   sep3:SetTexture(1,1,1); if sep3.SetVertexColor then sep3:SetVertexColor(1,1,1,0.25) end
 
-  -- Auto role assignment checkbox (RB-side)
-  RB.cbRoleAssign = CreateFrame("CheckButton", "TacticaRBRoleAssign", f, "UICheckButtonTemplate")
-  RB.cbRoleAssign:SetWidth(20); RB.cbRoleAssign:SetHeight(20)
-  RB.cbRoleAssign:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -340)
-  getglobal("TacticaRBRoleAssignText"):SetText("Auto-Assign")
-  RB.cbRoleAssign:SetChecked(false)
-  RB.cbRoleAssign:SetScript("OnClick", function() RB_AutoInviteUpdateFromUI() end)
+-- Auto-Assign
+RB.cbRoleAssign = CreateFrame("CheckButton", "TacticaRBRoleAssign", f, "UICheckButtonTemplate")
+RB.cbRoleAssign:SetWidth(20); RB.cbRoleAssign:SetHeight(20)
+RB.cbRoleAssign:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -340)
+getglobal("TacticaRBRoleAssignText"):SetText("Auto-Assign")
+RB.cbRoleAssign:SetChecked(RB.state.aiAutoRoles and true or false)
+RB.cbRoleAssign:SetScript("OnClick", function()
+  RB.state.aiAutoRoles = this:GetChecked() and true or false
+  RB.SaveState()
+  RB_AutoInviteUpdateFromUI("autoRoles")
+end)
 
-  -- Auto-Invite checkbox (no keyword, intent-based)
-  RB.cbAutoInvite = CreateFrame("CheckButton", "TacticaRBAutoInvite", f, "UICheckButtonTemplate")
-  RB.cbAutoInvite:SetWidth(20); RB.cbAutoInvite:SetHeight(20)
-  RB.cbAutoInvite:SetPoint("LEFT", RB.cbRoleAssign, "RIGHT", 70, 0)
-  getglobal("TacticaRBAutoInviteText"):SetText("Auto-Invite")
-  RB.cbAutoInvite:SetScript("OnClick", function() RB_AutoInviteUpdateFromUI() end)
+-- Auto-Invite
+RB.cbAutoInvite = CreateFrame("CheckButton", "TacticaRBAutoInvite", f, "UICheckButtonTemplate")
+RB.cbAutoInvite:SetWidth(20); RB.cbAutoInvite:SetHeight(20)
+RB.cbAutoInvite:SetPoint("LEFT", RB.cbRoleAssign, "RIGHT", 70, 0)
+getglobal("TacticaRBAutoInviteText"):SetText("Auto-Invite")
+RB.cbAutoInvite:SetScript("OnClick", function()
+RB_AutoInviteUpdateFromUI("autoInvite") end)
 
   -- Gear Scale dropdown (right of Auto-Invite)
   RB.ddGearScale = CreateFrame("Frame", "TacticaRBGearScale", f, "UIDropDownMenuTemplate")
@@ -1710,8 +1766,8 @@ function RB.Open()
   RB.lblGear:SetWidth(200); RB.lblGear:SetJustifyH("LEFT")
   RB.lblGear:SetText("|cffffd100Auto-Gearcheck|r")
 
+  -- How-it-works + list (no "enabled" line here)
   local function PrintGearHowItWorks()
-    RB_Print("|cff33ff99[Tactica]:|r Auto-Gearcheck enabled.")
     RB_Print("|cff33ff99[Tactica]:|r Players will be asked to grade their gear from 0 to 5. They may reply with a number (e.g. '2') or a range (e.g. '2-3'). Ranges use the average; 1-3 = 2 while 1-2 = 1 (0.5 rounds down).")
     RB_Print("|cff33ff99[Tactica]:|r Grade Gear Scale:")
     RB_Print("|cff33ff99[Tactica]:|r 0 – Starter / Dungeon blues")
@@ -1721,42 +1777,137 @@ function RB.Open()
     RB_Print("|cff33ff99[Tactica]:|r 4 – Naxx / T3")
     RB_Print("|cff33ff99[Tactica]:|r 5 – Kara40 / T3.5")
   end
+  -- Final full-green enabled line
+  local function PrintGearEnabled()
+    RB_Print("|cff33ff99[Tactica]:|r Auto-Gearcheck |cff00ff00ENABLED|r.")
+  end
 
-  RB.cbGear:SetScript("OnClick", function()
-    RB.state.autoGear = this:GetChecked() and true or false
+RB.cbGear:SetScript("OnClick", function()
+  local prev = RB.state.autoGear and true or false
+  local want = this:GetChecked() and true or false
+
+  if want and RB.state.gearScale == nil then
+    this:SetChecked(false)
+    RB.state.autoGear = false
     RB.SaveState()
     RB_SyncInviteExtras()
-    if RB.state.autoGear then
-      if RB.state.gearScale == nil then
-        RB_Print("|cffff6666[Tactica]:|r Pick a Scale to use with Auto-Gearcheck.")
-      end
-      PrintGearHowItWorks()
-    end
-  end)
+    PrintGearHowItWorks()
+    RB_Print("|cffff6666[Tactica]:|r You need to select |cffffff00Required Gear|r (minimum gear scale) before enabling Auto-Gearcheck.")
+    return
+  end
+
+  RB.state.autoGear = want
+  RB.SaveState()
+  RB_SyncInviteExtras()
+
+  if want and not prev then
+    PrintGearHowItWorks()
+    PrintGearEnabled()
+  elseif (not want) and prev then
+    RB_Print("|cff33ff99[Tactica]:|r Auto-Gearcheck |cffff5555DISABLED|r.")
+  end
+end)
 
   -- Grey note explaining Auto-Assign vs Auto-Invite
   RB.lblAIExplain = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblAIExplain:SetPoint("BOTTOMLEFT", RB.cbRoleAssign, "BOTTOMLEFT", 0, -17)
+  RB.lblAIExplain:SetPoint("BOTTOMLEFT", RB.cbRoleAssign, "BOTTOMLEFT", 0, -20)
   RB.lblAIExplain:SetWidth(450); RB.lblAIExplain:SetJustifyH("LEFT")
   if RB.lblAIExplain.SetTextColor then RB.lblAIExplain:SetTextColor(0.7,0.7,0.7) end
   RB.lblAIExplain:SetText("Note: Auto-Assign will auto-set roles in raid roster. Auto-Invite will invite on intent.")
-  
+ 
+
+  -- SR & DISCORD SECTION
+  RB.titleSRD = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  RB.titleSRD:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -395)
+  RB.titleSRD:SetText("|cff33ff99SR & DISCORD|r")
+
+  RB.sepSRD = f:CreateTexture(nil, "ARTWORK")
+  RB.sepSRD:SetHeight(1)
+  RB.sepSRD:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -410)
+  RB.sepSRD:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -410)
+  RB.sepSRD:SetTexture(1, 1, 1); if RB.sepSRD.SetVertexColor then RB.sepSRD:SetVertexColor(1, 1, 1, 0.25) end
+
+  local lblSRLink = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  lblSRLink:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -420)
+  lblSRLink:SetText("SR link:")
+
+  RB.editSRLink = CreateFrame("EditBox", "TacticaRBSRLink", f, "InputBoxTemplate")
+  RB.editSRLink:SetPoint("LEFT", lblSRLink, "RIGHT", 6, 0)
+  RB.editSRLink:SetAutoFocus(false); RB.editSRLink:SetWidth(100); RB.editSRLink:SetHeight(20)
+  RB.editSRLink:SetMaxLetters(200)
+  RB.editSRLink:SetText(RB.state.srLink or "")
+  RB.editSRLink:SetScript("OnTextChanged", function()
+    RB.state.srLink = this:GetText() or ""
+    if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
+  end)
+
+  local lblDiscord = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  lblDiscord:SetPoint("LEFT", RB.editSRLink, "RIGHT", 10, 0)
+  lblDiscord:SetText("Discord link:")
+
+  RB.editDiscordLink = CreateFrame("EditBox", "TacticaRBDcLink", f, "InputBoxTemplate")
+  RB.editDiscordLink:SetPoint("LEFT", lblDiscord, "RIGHT", 6, 0)
+  RB.editDiscordLink:SetAutoFocus(false); RB.editDiscordLink:SetWidth(100); RB.editDiscordLink:SetHeight(20)
+  RB.editDiscordLink:SetMaxLetters(200)
+  RB.editDiscordLink:SetText(RB.state.discordLink or "")
+  RB.editDiscordLink:SetScript("OnTextChanged", function()
+    RB.state.discordLink = this:GetText() or ""
+    if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
+  end)
+
+  RB.btnSRDPost = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+  RB.btnSRDPost:SetWidth(50); RB.btnSRDPost:SetHeight(20)
+  RB.btnSRDPost:SetPoint("LEFT", RB.editDiscordLink, "RIGHT", 8, 0)
+  RB.btnSRDPost:SetText("Post")
+
+  local function RB_PostSRDiscord()
+    local sr = RB_Trim(RB.state.srLink or "")
+    local dc = RB_Trim(RB.state.discordLink or "")
+    if sr == "" and dc == "" then return end
+    if not RB_IsLeaderOrAssist() then
+      RB_Print("|cffff6666[Tactica]:|r You must be raid leader or assist to post raid warnings.")
+      return
+    end
+    if sr ~= "" then
+      SendChatMessage("[Tactica] - SR link: " .. sr, "RAID_WARNING")
+    end
+    if dc ~= "" then
+      SendChatMessage("[Tactica] - Join Discord: " .. dc, "RAID_WARNING")
+    end
+  end
+  RB.btnSRDPost:SetScript("OnClick", RB_PostSRDiscord)
+
+  function RB.UpdateSRDPostState()
+    if not RB.btnSRDPost then return end
+    local sr = RB_Trim(RB.state.srLink or "")
+    local dc = RB_Trim(RB.state.discordLink or "")
+    local hasAny = (sr ~= "" or dc ~= "")
+    local can = RB_IsLeaderOrAssist()
+    if hasAny and can then
+      RB.btnSRDPost:Enable(); RB.btnSRDPost:SetAlpha(1.0)
+    else
+      RB.btnSRDPost:Disable(); RB.btnSRDPost:SetAlpha(0.5)
+    end
+  end
+
   local sep4 = f:CreateTexture(nil, "ARTWORK")
   sep4:SetHeight(1)
-  sep4:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -385)
-  sep4:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -385)
+  sep4:SetPoint("TOPLEFT",  f, "TOPLEFT",  16, -445)
+  sep4:SetPoint("TOPRIGHT", f, "TOPRIGHT", -16, -445)
   sep4:SetTexture(1, 1, 1); if sep4.SetVertexColor then sep4:SetVertexColor(1, 1, 1, 0.25) end
 
+  -- END SR & DISCORD SECTION 
+
   RB.lblNotes = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblNotes:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -395)
+  RB.lblNotes:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -455)
   RB.lblNotes:SetWidth(450); RB.lblNotes:SetJustifyH("LEFT"); RB.lblNotes:SetText("")
 
   RB.lblPreview = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblPreview:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -420)
+  RB.lblPreview:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -480)
   RB.lblPreview:SetWidth(450); RB.lblPreview:SetJustifyH("LEFT"); RB.lblPreview:SetText("|cff33ff99Preview:|r ")
 
   RB.lblHint = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  RB.lblHint:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -465)
+  RB.lblHint:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -515)
   RB.lblHint:SetWidth(450); RB.lblHint:SetJustifyH("LEFT")
   RB.lblHint:SetText("|cffffd100Note:|r |cff999999Assign roles (Tank / Healer / DPS) to players in the Raid Roster (hotkey: "
     .. (RaidRosterHotkey() or "unbound") .. ") to auto-adjust the LFM announcement.|r")
@@ -1865,6 +2016,7 @@ function RB.LoadPreset(name)
   RB.state.interval    = (p.interval == 60 or p.interval == 120 or p.interval == 300) and p.interval or 120
   RB.state.gearScale   = p.gearScale
   RB.state.autoGear    = p.autoGear and true or false
+  RB.state.discordLink = p.discordLink or ""
 
   if RB.state.raid == "World Bosses" then RB.ddWBoss:Show(); RB.ddESMode:Hide()
   elseif RB.state.raid == "Emerald Sanctum" then RB.ddESMode:Show(); RB.ddWBoss:Hide()
@@ -1894,6 +2046,8 @@ function RB.LoadPreset(name)
   if RB.cbHideNeed then RB.cbHideNeed:SetChecked(RB.state.hideNeed) end
   if RB.editHR  then RB.editHR:SetText(RB.state.hr or "") end
   if RB.editFree then RB.editFree:SetText(RB.state.free or "") end
+  if RB.editDiscordLink then RB.editDiscordLink:SetText(RB.state.discordLink or "") end
+  if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
   RB.InitGearScaleDropdown()
 
   RB.SaveState()

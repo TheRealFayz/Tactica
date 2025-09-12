@@ -20,10 +20,12 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 ### 2. Organize your comp at a glance
 - Right-click raid roster to Toggle as Healer / DPS / Tank. Roles sync to everyone running Tactica; latest leader/assist decision wins.
 - Clean indicators next to names (H/D/T).
-- pfUI (optional): Tactica’s Tank role also flags pfUI’s tank role when pfUI is present (requires SuperWoW).
+- pfUI (optional): Tactica’s Tank role also flags the vanilla-compliant pfUI addon’s tank role when pfUI is present (requires SuperWoW).
 - `/tt roles` to post the assigned and number of tanks, healers and DPS, respectively, to the raid.
 - `/tt rolewhisper` toggle the role whisper function on/off (same as the checkbox in **/tt options**).
+- `/tt autoinvite` or `/ttai` for standalone auto-invite frame, with auto-assign roles functionality.
 <img width="492" height="327" alt="Tactica - Roster" src="https://github.com/user-attachments/assets/991708d0-b30d-402f-9eff-57cb767b9859" />
+<img width="322" height="145" alt="image" src="https://github.com/user-attachments/assets/708926de-70be-45ff-a640-c5ae77d6ab8c" />
 
 ### 3. Build Raids (LFM poster/creator)
 - Select raid, size and setup and Tactica will do the rest. Creating a seamless LFM message, to post in your channels.
@@ -31,10 +33,10 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 - Select Yell, LFG or/and World to post in - set optional "Auto-announce".
 - Syncs with raid roster, so when you assign a role - the LFM announcement will adjust accordingly.
 - Auto-invite/auto-assign/auto-gearcheck, all built-in to ease the pain.
+- Post Discord & SR links during formation.
 - `/tt build` for the LFM/raid builder UI.
 - `/tt lfm` posts once using your current Builder settings and respects a 30s cooldown (shared with the “Announce” button).
-- `/tt autoinvite` or `/ttai` for standalone auto-invite frame, with auto-assign roles functionality.
-<img width="595" height="665" alt="Tactica-Raid Builder" src="https://github.com/user-attachments/assets/3e04ce83-9fb9-4cf2-a017-8fd88e8cdcb3" />
+<img width="595" height="719" alt="image" src="https://github.com/user-attachments/assets/9e626051-85bd-496e-b7be-75f91d2c70df" />
 
 ### 4. Loot mode QoL for bosses
 - Optional auto Master Looter on boss target (RL only). After a boss is fully looted, get a popup to switch back (e.g., to Group Loot). (same as the checkbox in **/tt options**).
@@ -51,14 +53,14 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 
 ## Installation
 1.  Navigate to your World of Warcraft installation folder.
-2.  Go into the `WoW` -> `Interface` -> `AddOns` directory.
+2.  Go into the `Interface` -> `AddOns` directory.
 3.  Place the `Tactica` folder directly into the `AddOns` folder.
 4.  Restart World of Warcraft completely.
 
-Alternatively just take add this link and add to the Turtle WoW launcher (addon tab -> Add new addon) or similarly with GithubAddonsManager: https://github.com/Player-Doite/tactica
+Alternatively just take add this link and add to the launcher (addon tab -> Add new addon) or similarly with GithubAddonsManager: https://github.com/Player-Doite/tactica
 
 ## Contact
-Addon, logic and default tactics all made by Doite. Contact me in-game, github via "Issues" or via TWoW discord if something is wrong.
+Addon, logic and default tactics all made by Doite. Contact me in-game, github via "Issues" or via discord if something is wrong.
 
 _Other debug commands are:_
 

@@ -1,4 +1,4 @@
--- TacticaLoot.lua - Boss loot mode helper for Turtle WoW
+-- TacticaLoot.lua - Boss loot mode helper for "vanilla"-compliant versions of Wow
 -- Created by Doite
 
 -------------------------------------------------
