@@ -161,7 +161,7 @@ local PURE_DPS = { hunter=true, mage=true, rogue=true, warlock=true }
 
 local ROLE_KEY = {
   tank="TANK", tanks="TANK", prot="TANK", protection="TANK", shield="TANK", bear="TANK", furyprot="TANK", ot="TANK", mt="TANK",
-  heal="HEALER", healer="HEALER", heals="HEALER", resto="HEALER", holy="HEALER", disc="HEALER", discipline="HEALER",
+  heal="HEALER", healer="HEALER", heals="HEALER", resto="HEALER", holy="HEALER", disc="HEALER", discipline="HEALER", spriest="DPS",
   dps="DPS", dd="DPS", damage="DPS", fury="DPS", arms="DPS", enh="DPS", enhancement="DPS", elemental="DPS", ele="DPS", hunter="DPS", mage="DPS", rogue="DPS", warlock="DPS",
   balance="DPS", boomkin="DPS", moonkin="DPS", shadow="DPS", sp="DPS", cat="DPS", feral="DPS", mm="DPS", marks="DPS", marksmanship="DPS", survival="DPS", bm="DPS", sv="DPS", surv="dps",
   combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps", rdps="dps", mdps="dps", boomi="dps", boomie="dps",
@@ -177,7 +177,7 @@ local CLASS_KEY = {
 local SPEC2CLASS = {
   frost="mage", fire="mage", arcane="mage",
   shadow="priest", holy="priest", sp="priest",
-  disc="priest", discipline="priest",
+  disc="priest", discipline="priest", spriest="priest",
   ret="paladin", retribution="paladin", prot="paladin", pal="paladin", pala="paladin",
   enhance="shaman", enhancement="shaman", elemental="shaman", ele="shaman",
   feral="druid", balance="druid", boomkin="druid", bear="druid", cat="druid",
