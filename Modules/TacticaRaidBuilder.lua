@@ -2073,6 +2073,114 @@ SlashCmdList["TACTICARBLFM"] = function(msg)
 end
 
 -------------------------------------------------
+-- Leader detection popup with per-raid "don't show again"
+-------------------------------------------------
+local RB_leaderEvt = CreateFrame("Frame")
+RB_leaderEvt:RegisterEvent("RAID_ROSTER_UPDATE")
+RB_leaderEvt:RegisterEvent("PLAYER_ENTERING_WORLD")
+
+-- ensure SavedVariable exists
+TacticaDB = TacticaDB or {}
+TacticaDB.disablePopupThisRaid = TacticaDB.disablePopupThisRaid or false
+
+local selfWasInRaid = false
+local popupShownThisRaid = false
+
+local function RB_ShowLeaderPopup()
+    -- do not show if Raid Builder is already open
+    if RB.frame and RB.frame:IsShown() then return end
+    if RB._leaderPopup and RB._leaderPopup:IsShown() then return end
+    if TacticaDB.disablePopupThisRaid then return end
+
+    popupShownThisRaid = true
+
+    local f = CreateFrame("Frame", "TacticaLeaderPopup", UIParent)
+    RB._leaderPopup = f
+    f:SetWidth(350); f:SetHeight(220)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    f:SetBackdrop({
+        bgFile   = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 16, edgeSize = 32,
+        insets = { left=11, right=12, top=12, bottom=11 }
+    })
+    f:SetBackdropColor(0, 0, 0, 1)
+    f:SetBackdropBorderColor(1, 1, 1, 1)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetToplevel(true)
+    f:EnableMouse(true)
+
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", f, "TOP", 0, -20)
+    title:SetText("TACTICA RAID BUILDER")
+
+    local text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    text:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -45)
+    text:SetWidth(360)
+    text:SetJustifyH("LEFT")
+    text:SetText("You are forming a raid.\nWould you like Tactica to assist?\n\nFeatures:\n• Auto role-assignment\n• Auto Gearchecks\n• Auto-invite (use /ttai)\n• Auto announcements\n• Auto LFM-message updates")
+
+    -- checkbox
+    local checkbox = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    checkbox:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 20, 40)
+
+    local label = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("LEFT", checkbox, "RIGHT", 5, 0)
+    label:SetText("Don't show this message again this raid")
+
+    checkbox:SetScript("OnClick", function()
+    TacticaDB.disablePopupThisRaid = this:GetChecked()
+	end)
+
+
+    -- No button
+    local btnNo = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    btnNo:SetWidth(140); btnNo:SetHeight(24)
+    btnNo:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 20, 15)
+    btnNo:SetText("No, manage manually")
+    btnNo:SetScript("OnClick", function() f:Hide() end)
+
+    -- Yes button
+    local btnYes = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    btnYes:SetWidth(160); btnYes:SetHeight(24)
+    btnYes:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -20, 15)
+    btnYes:SetText("Yes, open Raid Builder")
+    btnYes:SetScript("OnClick", function()
+        f:Hide()
+        if RB.Open then RB.Open() end
+    end)
+end
+
+-- handle events
+RB_leaderEvt:SetScript("OnEvent", function()
+    local num = GetNumRaidMembers and GetNumRaidMembers() or 0
+    local inRaid = num > 0 and num < 40
+
+    -- Reset per-raid popup flag when leaving raid
+    if not inRaid and selfWasInRaid then
+        TacticaDB.disablePopupThisRaid = false
+        popupShownThisRaid = false
+    end
+    selfWasInRaid = inRaid
+
+    if not inRaid then return end
+
+    -- only show popup if not already shown this raid
+    if popupShownThisRaid or TacticaDB.disablePopupThisRaid then return end
+
+    local playerName = UnitName("player")
+    if not playerName then return end
+
+    for i = 1, num do
+        local rname, rank = GetRaidRosterInfo(i)
+        if rname and rname == playerName and (rank == 1 or rank == 2) then
+            RB_ShowLeaderPopup()
+            break
+        end
+    end
+end)
+
+-------------------------------------------------
 -- Exclude List UI (session-only; affects LFM counts)
 -------------------------------------------------
 RB._exclude = RB._exclude or {}
