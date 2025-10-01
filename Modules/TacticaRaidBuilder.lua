@@ -2154,7 +2154,7 @@ end
 -- handle events
 RB_leaderEvt:SetScript("OnEvent", function()
     local num = GetNumRaidMembers and GetNumRaidMembers() or 0
-    local inRaid = num > 0 and num < 40
+	local inRaid = num > 0
 
     -- Reset per-raid popup flag when leaving raid
     if not inRaid and selfWasInRaid then
