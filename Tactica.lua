@@ -995,36 +995,21 @@ end
 
 function Tactica:PrintHelp()
     self:PrintMessage("Tactica Commands:");
-	self:PrintMessage("  |cffffff78/tt build|r")
-	self:PrintMessage("    – Open Raid Builder to create auto-adjusting LFM announcements.")
-	self:PrintMessage("  |cffffff78/tt lfm|r")
-	self:PrintMessage("    – Announce current Raid Builder message")
-	self:PrintMessage("  |cffffff78/tt autoinvite|r")
-	self:PrintMessage("    – Open Auto-Invite window (aliases: |cffffff00/ttai|r)")
-    self:PrintMessage("  |cffffff00/tt post|r");
-    self:PrintMessage("    - Opens a popup to select and post a tactic.");
-	self:PrintMessage("  |cffffff00/tt <Raid>,<Boss>,[Tactic]|r");
-    self:PrintMessage("    - Posts a tactic via command (for Macros).");
-    self:PrintMessage("  |cffffff00/tt add|r");
-    self:PrintMessage("    - Opens a popup to add a custom tactic.");
-    self:PrintMessage("  |cffffff00/tt remove|r");
-    self:PrintMessage("    - Opens a popup to remove a custom tactic.");
-    self:PrintMessage("  |cffffff00/tt list|r");
-    self:PrintMessage("    - Lists all available tactics.");
-	self:PrintMessage("  |cffffff00/tt autopost|r");
-    self:PrintMessage("    - Toggle the auto-popup when targeting a boss.");
-	self:PrintMessage("  |cffffff00/ttpush|r or |cffffff00/tt pushroles|r");
-    self:PrintMessage("    - Raid leaders only: push all role assignments (H/D/T) to the raid manually.");
-	self:PrintMessage("  |cffffff00/ttclear|r or |cffffff00/tt clearroles|r");
-	self:PrintMessage("    - Clear all role tags locally (Raid leaders: clears for the whole raid).");
-	self:PrintMessage("  |cffffff00/tt rolewhisper|r")
-	self:PrintMessage("    - Toggle whispering a confirmation to players when you mark/clear their role.")
-	self:PrintMessage("  |cffffff00/tt roles|r")
-    self:PrintMessage("    - Post Tanks/Healers/DPS to raid (DPS = the rest).")
-	self:PrintMessage("  |cffffff00/tt options|r")
-	self:PrintMessage("    - Open a small options panel for toggles.")
-	self:PrintMessage("  |cffffff00/w Doite|r");
-    self:PrintMessage("    - Addon and tactics by Doite - msg if incorrect.");
+	self:PrintMessage("  |cffffff78/tt build|r (tool for auto creating raids)")
+	self:PrintMessage("  |cffffff78/tt lfm|r (announce current /tt build msg)")
+	self:PrintMessage("  |cffffff78/tt autoinvite|r or |cffffff78/ttai|r (standalone keyword auto-invite)")
+    self:PrintMessage("  |cffffff00/tt post|r (popup to select and post a tactic)");
+	self:PrintMessage("  |cffffff00/tt <Raid>,<Boss>,[Tactic]|r (post a tactic via command - for macros)");
+    self:PrintMessage("  |cffffff00/tt add|r (add custom tactics)");
+    self:PrintMessage("  |cffffff00/tt remove|r (remove a custom tactic)");
+    self:PrintMessage("  |cffffff00/tt list|r (lists all available tactics)");
+	self:PrintMessage("  |cffffff00/tt autopost|r (toggle the auto boss-popup");
+	self:PrintMessage("  |cffffff00/ttpush|r or |cffffff00/tt pushroles|r (push role assignments manually)");
+	self:PrintMessage("  |cffffff00/ttclear|r or |cffffff00/tt clearroles|r (clear role assignments manually)");
+	self:PrintMessage("  |cffffff00/tt rolewhisper|r (toggle whisper role confirmation)")
+	self:PrintMessage("  |cffffff00/tt roles|r (post Tanks/Healers/DPS to raid)")
+	self:PrintMessage("  |cffffff00/tt options|r (small options panel for toggles)")
+	self:PrintMessage("  |cffffff00/w Doite|r (addon and tactics by Doite)");
 end
 
 function Tactica:ListAvailableTactics()
