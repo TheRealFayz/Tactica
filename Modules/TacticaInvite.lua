@@ -1302,10 +1302,12 @@ INV._evt:SetScript("OnEvent", function()
     if who and who ~= "" then
       local name = cleanName(who)
 
-      -- Tell them what to do
-      say(name, "[Tactica]: You are in group - please leave and write to me again.")
+      -- Only whisper this if auto-invite (standalone or RB) is active
+      if INV.enabled or INV.rbEnabled then
+        say(name, "[Tactica]: You are in group - please leave and write to me again.")
+      end
 
-      -- Open a 90s auto re-invite window, remembering what was attempted
+      -- Always remember last invite for auto-retry (quietly)
       local ri = INV._recentInvite[lower(name)]
       INV._groupRetry[lower(name)] = {
         untilT       = now() + AWAIT_SEC,            -- 90 seconds
