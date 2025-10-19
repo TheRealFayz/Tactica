@@ -2342,6 +2342,7 @@ do
     GameTooltip:SetOwner(btn, "ANCHOR_LEFT")
 	GameTooltip:AddLine("TACTICA", 0.2, 1.0, 0.6)
     GameTooltip:AddLine("Click minimap icon to open menu", 1, 1, 1)
+	GameTooltip:AddLine("Version: " .. tostring(Tactica_GetVersion()), 1, 1, 1)
     GameTooltip:AddLine(" ")
     for _, line in ipairs(_HelpLines()) do
       GameTooltip:AddLine(line, 0.9, 0.9, 0.9, 1)
