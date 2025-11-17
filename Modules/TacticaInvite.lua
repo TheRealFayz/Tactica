@@ -1301,13 +1301,21 @@ INV._evt:SetScript("OnEvent", function()
 
     if who and who ~= "" then
       local name = cleanName(who)
+      local lname = lower(name)
 
-      -- Tell them what to do
-      say(name, "[Tactica]: You are in group - please leave and write to me again.")
+      -- only send the "you're in a group" whisper once per player per session
+      INV._groupWarned = INV._groupWarned or {}
+      if not INV._groupWarned[lname] then
+        -- Only whisper this if auto-invite (standalone or RB) is active
+        if INV.enabled or INV.rbEnabled then
+          say(name, "[Tactica]: You are in group - please leave and write to me again.")
+        end
+        INV._groupWarned[lname] = true
+      end
 
-      -- Open a 90s auto re-invite window, remembering what was attempted
-      local ri = INV._recentInvite[lower(name)]
-      INV._groupRetry[lower(name)] = {
+      -- Always remember last invite for auto-retry (quietly)
+      local ri = INV._recentInvite[lname]
+      INV._groupRetry[lname] = {
         untilT       = now() + AWAIT_SEC,            -- 90 seconds
         role         = ri and ri.role or nil,
         doAssign     = ri and ri.doAssign or false,
