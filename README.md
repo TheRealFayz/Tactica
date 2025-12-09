@@ -59,6 +59,11 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 
 Alternatively just take add this link and add to the launcher (addon tab -> Add new addon) or similarly with GithubAddonsManager: https://github.com/Player-Doite/tactica
 
+## Tip
+This project is free and built with care in my spare time. Tips are 100% optional, but always appreciated—and help fund the next cup of coffee. Click the image below to support the cause!
+
+[<img width="50" height="50" alt="Coffee" src="https://github.com/user-attachments/assets/183dbfd3-5b1b-4616-b110-09832d7bf153" />](https://buymeacoffee.com/doite)
+
 ## Contact
 Addon, logic and default tactics all made by Doite. Contact me in-game, github via "Issues" or via discord if something is wrong.
 
