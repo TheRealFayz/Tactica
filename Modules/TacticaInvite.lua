@@ -165,7 +165,7 @@ local ROLE_KEY = {
   dps="DPS", dd="DPS", damage="DPS", fury="DPS", arms="DPS", enh="DPS", enhancement="DPS", elemental="DPS", ele="DPS", hunter="DPS", mage="DPS", rogue="DPS", warlock="DPS",
   balance="DPS", boomkin="DPS", moonkin="DPS", shadow="DPS", sp="DPS", cat="DPS", feral="DPS", mm="DPS", marks="DPS", marksmanship="DPS", survival="DPS", bm="DPS", sv="DPS", surv="dps",
   combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps", rdps="dps", mdps="dps", boomi="dps", boomie="dps",
-  ["+tank"]="TANK", ["+heal"]="HEALER", ["+heals"] = "HEALER", ["+dps"] = "DPS"
+  ["+tank"]="TANK", ["+heal"]="HEALER", ["+heals"] = "HEALER", ["+dps"] = "DPS", rsham="Healer", enh="DPS"
 }
 
 local CLASS_KEY = {
@@ -177,7 +177,7 @@ local CLASS_KEY = {
 local SPEC2CLASS = {
   frost="mage", fire="mage", arcane="mage",
   shadow="priest", holy="priest", sp="priest",
-  disc="priest", discipline="priest", spriest="priest",
+  disc="priest", discipline="priest", spriest="priest", rsham="Shaman", sham="Shaman",
   ret="paladin", retribution="paladin", prot="paladin", pal="paladin", pala="paladin",
   enhance="shaman", enhancement="shaman", elemental="shaman", ele="shaman",
   feral="druid", balance="druid", boomkin="druid", bear="druid", cat="druid",
@@ -225,8 +225,10 @@ local function kw_hit(msg, kw)
     return string.find(hay, needle, 1, true) ~= nil
   else
     -- single word: keep the old token semantics
-    local toks = select(1, tokenize(msg))
-    for i=1,table.getn(toks) do if toks[i] == kwNorm then return true end end
+    local toks = tokenize(msg)
+    for i=1,table.getn(toks) do
+      if toks[i] == kwNorm then return true end
+    end
     return false
   end
 end

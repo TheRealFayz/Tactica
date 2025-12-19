@@ -67,6 +67,8 @@ local function RB_SnapshotForPreset()
     interval  = RB.state.interval,
     gearScale = RB.state.gearScale,
     autoGear  = RB.state.autoGear and true or false,
+	aiAutoRoles  = RB.state.aiAutoRoles and true or false,
+    aiAutoInvite = RB.state.aiAutoInvite and true or false,
     discordLink = RB.state.discordLink or "",
   }
 end
@@ -287,8 +289,10 @@ RB.state = RB.state or {
   chWorld=false, chLFG=false, chYell=false,
   auto=false, interval=120, running=false,
   gearScale=nil, autoGear=false,
+  aiAutoRoles=false,
+  aiAutoInvite=false,
   srLink="",           -- session-only
-  discordLink="",      -- only saved via presets
+  discordLink="",
 }
 RB.frame = RB.frame or nil
 RB.ddRaid, RB.ddWBoss, RB.ddESMode, RB.ddSize = nil, nil, nil, nil
@@ -648,8 +652,9 @@ function RB.ApplySaved()
 
   RB.state.chWorld  = S.chWorld and true or false
   RB.state.chLFG    = S.chLFG   and true or false
-  RB.state.chYell   = S.chYell  and true or false
+  RB.state.chYell  = S.chYell  and true or false
   RB.state.aiAutoRoles  = S.aiAutoRoles  and true or false
+  RB.state.aiAutoInvite = S.aiAutoInvite and true or false
   RB.state.interval = (S.interval == 60 or S.interval == 120 or S.interval == 300) and S.interval or 120
 
   RB.state.auto     = false
@@ -676,7 +681,7 @@ function RB.SaveState()
   S.gearScale = st.gearScale
   S.autoGear  = st.autoGear
   S.aiAutoRoles  = st.aiAutoRoles  and true or false
-  -- Intentionally NOT saving srLink or discordLink in the general Builder save
+  S.aiAutoInvite = st.aiAutoInvite and true or false
 end
 
 local function RequirementsComplete()
@@ -1292,7 +1297,8 @@ local function OnClearClick()
   -- STOP AUTO-INVITE and AUTO-ASSIGN ROLES
   if RB.cbAutoInvite then RB.cbAutoInvite:SetChecked(false) end
   if RB.cbRoleAssign then RB.cbRoleAssign:SetChecked(false) end
-  RB.state.aiAutoRoles = false
+  RB.state.aiAutoRoles  = false
+  RB.state.aiAutoInvite = false
   RB_AutoInviteUpdateFromUI("clear")
 
   RB.cbCanSum:SetChecked(RB.state.canSum)
@@ -1706,8 +1712,13 @@ RB.cbAutoInvite = CreateFrame("CheckButton", "TacticaRBAutoInvite", f, "UICheckB
 RB.cbAutoInvite:SetWidth(20); RB.cbAutoInvite:SetHeight(20)
 RB.cbAutoInvite:SetPoint("LEFT", RB.cbRoleAssign, "RIGHT", 70, 0)
 getglobal("TacticaRBAutoInviteText"):SetText("Auto-Invite")
+RB.cbAutoInvite:SetChecked(RB.state.aiAutoInvite and true or false)
+
 RB.cbAutoInvite:SetScript("OnClick", function()
-RB_AutoInviteUpdateFromUI("autoInvite") end)
+  RB.state.aiAutoInvite = this:GetChecked() and true or false
+  RB.SaveState()
+  RB_AutoInviteUpdateFromUI("autoInvite")
+end)
 
   -- Gear Scale dropdown (right of Auto-Invite)
   RB.ddGearScale = CreateFrame("Frame", "TacticaRBGearScale", f, "UIDropDownMenuTemplate")
@@ -1980,6 +1991,7 @@ end)
   RB.UpdateButtonsForRunning()
   ApplyLockIcon()
   RB_SyncInviteExtras()
+  RB_AutoInviteUpdateFromUI()
   f:Show()
 end
 
@@ -2017,6 +2029,13 @@ function RB.LoadPreset(name)
   RB.state.gearScale   = p.gearScale
   RB.state.autoGear    = p.autoGear and true or false
   RB.state.discordLink = p.discordLink or ""
+  
+  if p.aiAutoRoles ~= nil then
+    RB.state.aiAutoRoles = p.aiAutoRoles and true or false
+  end
+  if p.aiAutoInvite ~= nil then
+    RB.state.aiAutoInvite = p.aiAutoInvite and true or false
+  end
 
   if RB.state.raid == "World Bosses" then RB.ddWBoss:Show(); RB.ddESMode:Hide()
   elseif RB.state.raid == "Emerald Sanctum" then RB.ddESMode:Show(); RB.ddWBoss:Hide()
@@ -2047,12 +2066,22 @@ function RB.LoadPreset(name)
   if RB.editHR  then RB.editHR:SetText(RB.state.hr or "") end
   if RB.editFree then RB.editFree:SetText(RB.state.free or "") end
   if RB.editDiscordLink then RB.editDiscordLink:SetText(RB.state.discordLink or "") end
+  if RB.cbGear then RB.cbGear:SetChecked(RB.state.autoGear and true or false) end
+
+  if RB.cbRoleAssign then
+    RB.cbRoleAssign:SetChecked(RB.state.aiAutoRoles and true or false)
+  end
+  if RB.cbAutoInvite then
+    RB.cbAutoInvite:SetChecked(RB.state.aiAutoInvite and true or false)
+  end
+
   if RB.UpdateSRDPostState then RB.UpdateSRDPostState() end
   RB.InitGearScaleDropdown()
 
   RB.SaveState()
   RB.RefreshPreview()
   RB_SyncInviteExtras()
+  RB_AutoInviteUpdateFromUI()
   RB_Print("|cff33ff99[Tactica]:|r Preset loaded: |cffffff00"..name.."|r.")
 end
 
