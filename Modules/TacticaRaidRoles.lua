@@ -647,7 +647,7 @@ InstallRosterHooks()
 ------------------------------------------------------------
 local lastRosterSig = ""
 local lastFullBroadcast = 0
-local justJoinedAt = 0 -- debounce broadcasts after we (re)join
+local justJoinedAt = 0 -- debounce broadcasts after player (re)join
 
 local function BuildRosterSignature()
   local names = {}
@@ -678,6 +678,17 @@ local function RunLater(delay, fn)
   f:SetScript("OnUpdate", function()
     t = t + (arg1 or 0)
     if t >= delay then f:SetScript("OnUpdate", nil); fn() end
+  end)
+end
+
+-- Coalesced delayed broadcast so role assignments updated by other modules (eg. auto-invite) have a chance to be applied before pushing a full list.
+local pendingFullBroadcast = false
+local function QueueBroadcastFullList()
+  if pendingFullBroadcast then return end
+  pendingFullBroadcast = true
+  RunLater(0.5, function()
+    pendingFullBroadcast = false
+    MaybeBroadcastFullList()
   end)
 end
 
@@ -771,7 +782,7 @@ f:SetScript("OnEvent", function()
       lastRosterSig = sig
       local now = GetTime and GetTime() or 0
       if not justJoinedAt or (now - justJoinedAt) >= 3 then
-        MaybeBroadcastFullList()
+        QueueBroadcastFullList()
       end
     end
 

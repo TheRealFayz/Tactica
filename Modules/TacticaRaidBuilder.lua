@@ -436,6 +436,15 @@ local function BuildNeedString(raidSize, tanksWant, healersWant, hideNeed)
   local dBudget = (raidSize or 0) - (tanksWant or 0) - (healersWant or 0); if dBudget < 0 then dBudget = 0 end
   local needD = dBudget - cd; if needD < 0 then needD = 0 end
 
+  -- If player "over-invite" tanks/healers, total remaining slots (needM) shrinks. Clamp role requests so player never ask for more people than can actually fit.
+  local slotsLeft = needM
+  if slotsLeft < 0 then slotsLeft = 0 end
+  if needT > slotsLeft then needT = slotsLeft end
+  slotsLeft = slotsLeft - needT
+  if needH > slotsLeft then needH = slotsLeft end
+  slotsLeft = slotsLeft - needH
+  if needD > slotsLeft then needD = slotsLeft end
+
   local parts = {}
   if needT > 0 then table.insert(parts, hideNeed and "Tank"   or (needT .. "xTanks"))   end
   if needH > 0 then table.insert(parts, hideNeed and "Healer" or (needH .. "xHealers")) end
