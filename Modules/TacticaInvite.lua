@@ -36,8 +36,13 @@ INV._gearPending   = {}
 INV._sessionIgnores = {}
 function TacticaInvite.ResetSessionIgnores()
   for k in pairs(INV._sessionIgnores) do INV._sessionIgnores[k] = nil end
+
   -- also clean per-player gear prompts for a fresh session
   INV.awaitingGear, INV._gearAsked, INV._gearAfterRole, INV._gearPending = {}, {}, {}, {}
+
+  -- IMPORTANT: when RB UI closes (or reload), nothing in here should keep converting or inviting later
+  INV._convertWhenFirstJoins = false
+  INV._pendingReinvites = {}
 end
 
 -- confirm queue (+ de-dupe index)
@@ -101,9 +106,33 @@ local function IsNameInRaid(name)
   return false
 end
 
+local function RB() return TacticaRaidBuilder end
+local function RBFrameShown()
+  local R = RB()
+  return (R and R.frame and R.frame:IsShown()) and true or false
+end
+
+-- Module should ONLY do anything when:
+--  - standalone keyword autoinvite is enabled, OR
+--  - raid builder frame is currently shown (and RB features are enabled)
+local function INV_IsActive()
+  if INV.enabled then return true end
+  if RBFrameShown() and (INV.rbEnabled or INV.rbAutoRoles or (INV.rbGearEnabled and INV.rbGearThreshold ~= nil)) then
+    return true
+  end
+  return false
+end
+
 local function TryConvertToRaid(reason, retries)
   retries = retries or 10
   if not INV._convertWhenFirstJoins then return end
+
+  -- If not active, do NOT leak conversion behavior.
+  if not INV_IsActive() then
+    INV._convertWhenFirstJoins = false
+    INV._pendingReinvites = {}
+    return
+  end
 
   local raidN  = (GetNumRaidMembers  and GetNumRaidMembers()  or 0)
   local partyN = (GetNumPartyMembers and GetNumPartyMembers() or 0)
@@ -163,9 +192,9 @@ local ROLE_KEY = {
   tank="TANK", tanks="TANK", prot="TANK", protection="TANK", shield="TANK", bear="TANK", furyprot="TANK", ot="TANK", mt="TANK",
   heal="HEALER", healer="HEALER", heals="HEALER", resto="HEALER", holy="HEALER", disc="HEALER", discipline="HEALER", spriest="DPS",
   dps="DPS", dd="DPS", damage="DPS", fury="DPS", arms="DPS", enh="DPS", enhancement="DPS", elemental="DPS", ele="DPS", hunter="DPS", mage="DPS", rogue="DPS", warlock="DPS",
-  balance="DPS", boomkin="DPS", moonkin="DPS", shadow="DPS", sp="DPS", cat="DPS", feral="DPS", mm="DPS", marks="DPS", marksmanship="DPS", survival="DPS", bm="DPS", sv="DPS", surv="dps",
-  combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="dps", swords="dps", rdps="dps", mdps="dps", boomi="dps", boomie="dps",
-  ["+tank"]="TANK", ["+heal"]="HEALER", ["+heals"] = "HEALER", ["+dps"] = "DPS", rsham="Healer", enh="DPS"
+  balance="DPS", boomkin="DPS", moonkin="DPS", shadow="DPS", sp="DPS", cat="DPS", feral="DPS", mm="DPS", marks="DPS", marksmanship="DPS", survival="DPS", bm="DPS", sv="DPS", surv="DPS",
+  combat="DPS", assassin="DPS", assassination="DPS", subtlety="DPS", sub="DPS", daggers="DPS", swords="DPS", rdps="DPS", mdps="DPS", boomi="DPS", boomie="DPS",
+  ["+tank"]="TANK", ["+heal"]="HEALER", ["+heals"] = "HEALER", ["+dps"] = "DPS", rsham="HEALER", enh="DPS"
 }
 
 local CLASS_KEY = {
@@ -489,10 +518,18 @@ end
 local function EnsureRaidMode(reason)
   local inRaid  = (GetNumRaidMembers  and GetNumRaidMembers()  or 0) > 0
   if inRaid then return true end
+
+  -- Don't arm conversion unless module is actually active (standalone or RB frame shown).
+  if not INV_IsActive() then
+    INV._convertWhenFirstJoins = false
+    return false
+  end
+
   INV._convertWhenFirstJoins = true
   TryConvertToRaid(reason or "ensure", 10)
   return false
 end
+
 
 local function inviteAndMaybeAssign(name, role, doAssign, skipCapacity)
   -- Capacity (RB) guard
