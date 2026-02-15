@@ -52,6 +52,7 @@ local function RB_SnapshotForPreset()
     raid      = RB.state.raid,
     worldBoss = RB.state.worldBoss,
     esMode    = RB.state.esMode,
+    customRaidText = RB.state.customRaidText or "",
     size      = RB.state.size,
     size_selected = RB.state.size_selected and true or false,
     tanks     = RB.state.tanks,
@@ -283,6 +284,7 @@ end
 -------------------------------------------------
 RB.state = RB.state or {
   raid=nil, worldBoss=nil, esMode=nil,
+  customRaidText=nil,
   size=nil, size_selected=false,
   tanks=nil, healers=nil, srs=0,
   hr="", free="", canSum=false, hideNeed=false,
@@ -460,6 +462,15 @@ end
 
 
 local function EffectiveRaidNameAndLabel()
+  if RB.state.raid == "-CUSTOM-" then
+    local txt = RB_Trim(RB.state.customRaidText or "")
+    if txt == "" then
+      return nil, nil
+    end
+    -- Use the user's text as the raid "label" in LFM + Preview
+    return txt, txt
+  end
+
   if RB.state.raid == "World Bosses" then
     if RB.state.worldBoss and RB.state.worldBoss ~= "" then
       return RB.state.worldBoss, RB.state.worldBoss
@@ -637,6 +648,7 @@ function RB.ApplySaved()
   RB.state.raid        = S.raid        or nil
   RB.state.worldBoss   = S.worldBoss   or nil
   RB.state.esMode      = S.esMode      or nil
+  RB.state.customRaidText = S.customRaidText or ""
   RB.state.size        = S.size        or nil
   RB.state.size_selected = (RB.state.size ~= nil)
   RB.state.gearScale = S.gearScale
@@ -680,6 +692,7 @@ function RB.SaveState()
   local S = Saved()
   local st = RB.state
   S.raid, S.worldBoss, S.esMode = st.raid, st.worldBoss, st.esMode
+  S.customRaidText = st.customRaidText or ""
   S.size = st.size
   S.tanks, S.healers, S.srs = st.tanks, st.healers, st.srs
   S.hr, S.free = st.hr, st.free
@@ -823,6 +836,10 @@ function RB.InitRaidDropdown()
     local rn
     for rn,_ in pairs(Tactica and Tactica.DefaultData or {}) do table.insert(raids, rn) end
     table.sort(raids)
+
+    -- Always put "-CUSTOM-" at the top (all caps)
+    table.insert(raids, 1, "-CUSTOM-")
+
     local i
     for i=1,table.getn(raids) do
       local raidName = raids[i]
@@ -833,18 +850,46 @@ function RB.InitRaidDropdown()
         RB.state.raid = picked
         RB.state.worldBoss = nil
         RB.state.esMode = nil
+
+        -- Reset selection state
         RB.state.size = nil; RB.state.size_selected = false
         RB.state.tanks, RB.state.healers = nil, nil
-        RB.state.srs = 0
-        if picked == "World Bosses" then RB.ddWBoss:Show(); RB.ddESMode:Hide()
-        elseif picked == "Emerald Sanctum" then RB.ddESMode:Show(); RB.ddWBoss:Hide()
-        else RB.ddWBoss:Hide(); RB.ddESMode:Hide() end
+
+        -- For CUSTOM: do not default SR either
+        if picked == "-CUSTOM-" then
+          RB.state.srs = nil
+          -- keep customRaidText as-is; user can type / edit
+        else
+          RB.state.srs = 0
+        end
+
+        -- Show/hide side dropdowns and custom editbox
+        if picked == "World Bosses" then
+          RB.ddWBoss:Show(); RB.ddESMode:Hide()
+          if RB.editCustomRaid then RB.editCustomRaid:Hide() end
+          if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Hide() end
+        elseif picked == "Emerald Sanctum" then
+          RB.ddESMode:Show(); RB.ddWBoss:Hide()
+          if RB.editCustomRaid then RB.editCustomRaid:Hide() end
+          if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Hide() end
+        elseif picked == "-CUSTOM-" then
+          RB.ddWBoss:Hide(); RB.ddESMode:Hide()
+          if RB.editCustomRaid then RB.editCustomRaid:Show() end
+          if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Show() end
+        else
+          RB.ddWBoss:Hide(); RB.ddESMode:Hide()
+          if RB.editCustomRaid then RB.editCustomRaid:Hide() end
+          if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Hide() end
+        end
+
         UIDropDownMenu_SetSelectedValue(RB.ddRaid, picked)
         UIDropDownMenu_SetText(picked, RB.ddRaid)
+
         UIDropDownMenu_SetText("Select Size", RB.ddSize); if RB.editCustomSize then RB.editCustomSize:Hide() end
         UIDropDownMenu_SetText("Pick Size first", RB.ddTanks)
         UIDropDownMenu_SetText("Pick Size first", RB.ddHealers)
-        UIDropDownMenu_SetText("0 SR", RB.ddSRs)
+        UIDropDownMenu_SetText("Pick Size first", RB.ddSRs)
+
         RB.SaveState(); RB.RefreshPreview(); CloseDropDownMenus()
         RB.InitSizeDropdown()
         RB.InitGearScaleDropdown()
@@ -852,6 +897,7 @@ function RB.InitRaidDropdown()
       UIDropDownMenu_AddButton(info)
     end
   end)
+
   if RB.state.raid then
     UIDropDownMenu_SetSelectedValue(RB.ddRaid, RB.state.raid)
     UIDropDownMenu_SetText(RB.state.raid, RB.ddRaid)
@@ -944,7 +990,15 @@ function RB.InitSizeDropdown()
       UIDropDownMenu_AddButton({ text="Select Raid first", notClickable=1, isTitle=1 })
       return
     end
-    local list = AllowedSizes[RB.state.raid] or ALL_SIZES
+
+    -- CUSTOM raid: allow ALL sizes regardless of AllowedSizes
+    local list
+    if RB.state.raid == "-CUSTOM-" then
+      list = ALL_SIZES
+    else
+      list = AllowedSizes[RB.state.raid] or ALL_SIZES
+    end
+
     local i
     for i=1,table.getn(list) do
       local n = list[i]
@@ -953,18 +1007,31 @@ function RB.InitSizeDropdown()
       info.func=function()
         local picked = this and this.value or n
         RB.state.size = picked; RB.state.size_selected = true
-        local d = ComputeDefaults(RB.state.raid, RB.state.size, RB.state.esMode)
-        RB.state.tanks, RB.state.healers, RB.state.srs = d.tanks, d.healers, d.srs
-        UIDropDownMenu_SetSelectedValue(RB.ddSize, picked)
-        UIDropDownMenu_SetText(tostring(RB.state.size), RB.ddSize)
-        UIDropDownMenu_SetText(RB.state.tanks .. " Tanks", RB.ddTanks)
-        UIDropDownMenu_SetText(RB.state.healers .. " Healers", RB.ddHealers)
-        UIDropDownMenu_SetText(RB.state.srs .. " SR", RB.ddSRs)
+
+        if RB.state.raid == "-CUSTOM-" then
+          -- Do NOT default-select tanks/healers/SRs for custom raids
+          RB.state.tanks, RB.state.healers, RB.state.srs = nil, nil, nil
+          UIDropDownMenu_SetSelectedValue(RB.ddSize, picked)
+          UIDropDownMenu_SetText(tostring(RB.state.size), RB.ddSize)
+          UIDropDownMenu_SetText("Pick Tanks", RB.ddTanks)
+          UIDropDownMenu_SetText("Pick Healers", RB.ddHealers)
+          UIDropDownMenu_SetText("Pick SR", RB.ddSRs)
+        else
+          local d = ComputeDefaults(RB.state.raid, RB.state.size, RB.state.esMode)
+          RB.state.tanks, RB.state.healers, RB.state.srs = d.tanks, d.healers, d.srs
+          UIDropDownMenu_SetSelectedValue(RB.ddSize, picked)
+          UIDropDownMenu_SetText(tostring(RB.state.size), RB.ddSize)
+          UIDropDownMenu_SetText(RB.state.tanks .. " Tanks", RB.ddTanks)
+          UIDropDownMenu_SetText(RB.state.healers .. " Healers", RB.ddHealers)
+          UIDropDownMenu_SetText(RB.state.srs .. " SR", RB.ddSRs)
+        end
+
         if RB.editCustomSize then RB.editCustomSize:Hide() end
         RB.SaveState(); RB.RefreshPreview(); CloseDropDownMenus()
       end
       UIDropDownMenu_AddButton(info)
     end
+
     UIDropDownMenu_AddButton({
       text = "Custom size",
       value = "custom",
@@ -982,7 +1049,12 @@ function RB.InitSizeDropdown()
   end)
 
   if RB.state.size_selected and RB.state.size then
-    local list = AllowedSizes[RB.state.raid] or ALL_SIZES
+    local list
+    if RB.state.raid == "-CUSTOM-" then
+      list = ALL_SIZES
+    else
+      list = AllowedSizes[RB.state.raid] or ALL_SIZES
+    end
     local isAllowed = false
     local i
     for i=1,table.getn(list) do if list[i] == RB.state.size then isAllowed = true; break end end
@@ -1283,6 +1355,17 @@ local function OnClearClick()
   TacticaDB.Builder = {}
   RB.ApplySaved()
 
+  RB.state.customRaidText = ""
+  if RB.editCustomRaid then
+    RB.editCustomRaid:SetText("")
+    RB.editCustomRaid:Hide()
+  end
+  if RB.lblCustomRaidHint then
+    RB.lblCustomRaidHint:Hide()
+  end
+  if RB.ddWBoss then RB.ddWBoss:Hide() end
+  if RB.ddESMode then RB.ddESMode:Hide() end
+
   UIDropDownMenu_SetText(RB.state.raid or "Select Raid", RB.ddRaid)
   UIDropDownMenu_SetText("Select Size", RB.ddSize); if RB.editCustomSize then RB.editCustomSize:Hide() end
   UIDropDownMenu_SetText("Pick Size first", RB.ddTanks)
@@ -1553,19 +1636,41 @@ function RB.Open()
 
   RB.ddRaid = CreateFrame("Frame", "TacticaRBRaid", f, "UIDropDownMenuTemplate")
   RB.ddRaid:SetPoint("TOPLEFT", f, "TOPLEFT", 70, -95); RB.ddRaid:SetWidth(180)
-
+  
   RB.ddWBoss  = CreateFrame("Frame", "TacticaRBWorldBoss", f, "UIDropDownMenuTemplate")
   RB.ddWBoss:SetPoint("LEFT", RB.ddRaid, "RIGHT", -28, 0); RB.ddWBoss:SetWidth(160)
-
+  
   RB.ddESMode = CreateFrame("Frame", "TacticaRBESMode", f, "UIDropDownMenuTemplate")
   RB.ddESMode:SetPoint("LEFT", RB.ddRaid, "RIGHT", -28, 0); RB.ddESMode:SetWidth(160)
+
+  RB.editCustomRaid = CreateFrame("EditBox", "TacticaRBCustomRaidText", f, "InputBoxTemplate")
+  RB.editCustomRaid:SetPoint("LEFT", RB.ddRaid, "RIGHT", -10, 3)
+  RB.editCustomRaid:SetAutoFocus(false)
+  RB.editCustomRaid:SetWidth(120)
+  RB.editCustomRaid:SetHeight(20)
+  RB.editCustomRaid:SetMaxLetters(40)
+  RB.editCustomRaid:SetText(RB.state.customRaidText or "")
+  RB.editCustomRaid:Hide()
+  
+  RB.lblCustomRaidHint = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  RB.lblCustomRaidHint:SetPoint("LEFT", RB.editCustomRaid, "RIGHT", 6, 0)
+  RB.lblCustomRaidHint:SetText("(max 40 char)")
+  RB.lblCustomRaidHint:Hide()
+  
+  RB.editCustomRaid:SetScript("OnTextChanged", function()
+    RB.state.customRaidText = this:GetText() or ""
+    RB.SaveState()
+    RB.RefreshPreview()
+  end)
+  RB.editCustomRaid:SetScript("OnEscapePressed", function() this:ClearFocus() end)
+  RB.editCustomRaid:SetScript("OnEnterPressed", function() this:ClearFocus() end)
+
 
   local lblSize = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   lblSize:SetPoint("TOPLEFT", f, "TOPLEFT", 20, -135); lblSize:SetText("Size:")
 
   RB.ddSize = CreateFrame("Frame", "TacticaRBSize", f, "UIDropDownMenuTemplate")
 
-  -- Custom Size edit (hidden by default)
   RB.editCustomSize = CreateFrame("EditBox", "TacticaRBCustomSize", f, "InputBoxTemplate")
   RB.editCustomSize:SetPoint("LEFT", RB.ddSize, "RIGHT", 85, 3)
   RB.editCustomSize:SetAutoFocus(true); RB.editCustomSize:SetWidth(100); RB.editCustomSize:SetHeight(20)
@@ -1974,6 +2079,16 @@ end)
   RB.InitRaidDropdown(); RB.InitWBossDropdown(); RB.InitESModeDropdown()
   if RB.state.raid == "World Bosses" then RB.ddWBoss:Show() else RB.ddWBoss:Hide() end
   if RB.state.raid == "Emerald Sanctum" then RB.ddESMode:Show() else RB.ddESMode:Hide() end
+  if RB.state.raid == "-CUSTOM-" then
+    if RB.editCustomRaid then
+      RB.editCustomRaid:SetText(RB.state.customRaidText or "")
+      RB.editCustomRaid:Show()
+    end
+    if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Show() end
+  else
+    if RB.editCustomRaid then RB.editCustomRaid:Hide() end
+    if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Hide() end
+  end
   RB.InitSizeDropdown()
   local function setN(drop, label, fromN, toN, setter) InitNumberDropdown(drop, label, fromN, toN, setter) end
   setN(RB.ddTanks,  "Tanks",   1, 10, function(n) RB.state.tanks = n end)
@@ -2022,6 +2137,7 @@ function RB.LoadPreset(name)
   RB.state.raid        = p.raid
   RB.state.worldBoss   = p.worldBoss
   RB.state.esMode      = p.esMode
+  RB.state.customRaidText = p.customRaidText or ""
   RB.state.size        = p.size
   RB.state.size_selected = p.size_selected and true or false
   RB.state.tanks       = p.tanks
@@ -2046,9 +2162,30 @@ function RB.LoadPreset(name)
     RB.state.aiAutoInvite = p.aiAutoInvite and true or false
   end
 
-  if RB.state.raid == "World Bosses" then RB.ddWBoss:Show(); RB.ddESMode:Hide()
-  elseif RB.state.raid == "Emerald Sanctum" then RB.ddESMode:Show(); RB.ddWBoss:Hide()
-  else RB.ddWBoss:Hide(); RB.ddESMode:Hide() end
+  if RB.state.raid == "World Bosses" then
+    RB.ddWBoss:Show(); RB.ddESMode:Hide()
+    if RB.editCustomRaid then RB.editCustomRaid:Hide() end
+    if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Hide() end
+  elseif RB.state.raid == "Emerald Sanctum" then
+    RB.ddESMode:Show(); RB.ddWBoss:Hide()
+    if RB.editCustomRaid then RB.editCustomRaid:Hide() end
+    if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Hide() end
+  elseif RB.state.raid == "-CUSTOM-" then
+    RB.ddWBoss:Hide(); RB.ddESMode:Hide()
+    if RB.editCustomRaid then
+      RB.editCustomRaid:SetText(RB.state.customRaidText or "")
+      RB.editCustomRaid:Show()
+    end
+    if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Show() end
+  else
+    RB.ddWBoss:Hide(); RB.ddESMode:Hide()
+    if RB.editCustomRaid then RB.editCustomRaid:Hide() end
+    if RB.lblCustomRaidHint then RB.lblCustomRaidHint:Hide() end
+  end 
+  
+  if RB.editCustomRaid then
+    RB.editCustomRaid:SetText(RB.state.customRaidText or "")
+  end
 
   UIDropDownMenu_SetText(RB.state.raid or "Select Raid", RB.ddRaid)
   UIDropDownMenu_SetText(RB.state.worldBoss or "Pick Boss", RB.ddWBoss)
