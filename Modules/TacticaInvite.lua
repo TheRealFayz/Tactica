@@ -123,9 +123,25 @@ local function INV_IsActive()
   return false
 end
 
+-- Only convert to raid if the RB target size is > 5. If RB custom size is 5 or less, we must stay party.
+local function INV_ShouldConvertToRaid()
+  if not RBFrameShown() then return true end -- standalone behavior unchanged
+  local R = RB()
+  local size = (R and R.state and R.state.size) or 0
+  if size > 0 and size <= 5 then return false end
+  return true
+end
+
 local function TryConvertToRaid(reason, retries)
   retries = retries or 10
   if not INV._convertWhenFirstJoins then return end
+
+  -- If RB size is 5 or less, never convert.
+  if not INV_ShouldConvertToRaid() then
+    INV._convertWhenFirstJoins = false
+    INV._pendingReinvites = {}
+    return
+  end
 
   -- If not active, do NOT leak conversion behavior.
   if not INV_IsActive() then
@@ -518,6 +534,12 @@ end
 local function EnsureRaidMode(reason)
   local inRaid  = (GetNumRaidMembers  and GetNumRaidMembers()  or 0) > 0
   if inRaid then return true end
+
+  -- If RB size is 5 or less, never convert.
+  if not INV_ShouldConvertToRaid() then
+    INV._convertWhenFirstJoins = false
+    return false
+  end
 
   -- Don't arm conversion unless module is actually active (standalone or RB frame shown).
   if not INV_IsActive() then
@@ -1363,7 +1385,13 @@ INV._evt:SetScript("OnEvent", function()
     end
 
   elseif event == "PARTY_MEMBERS_CHANGED" or event == "PARTY_LEADER_CHANGED" then
-    TryConvertToRaid("roster-event", 6)
+    if INV_ShouldConvertToRaid() then
+      TryConvertToRaid("roster-event", 6)
+    else
+      -- Ensure we don't keep any stale conversion intent around.
+      INV._convertWhenFirstJoins = false
+      INV._pendingReinvites = {}
+    end
 
   elseif event == "RAID_ROSTER_UPDATE" then
     -- If become a raid, clear the flag and flush pending reinvites
