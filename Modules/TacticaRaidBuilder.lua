@@ -347,13 +347,42 @@ end)
 -------------------------------------------------
 function RB_RaidRosterSet()
   local set = {}
-  local n = GetNumRaidMembers and GetNumRaidMembers() or 0
-  local i
-  for i = 1, n do
-    local name = GetRaidRosterInfo(i)
-    if name and name ~= "" then set[name] = true end
+
+  local rn = (GetNumRaidMembers and GetNumRaidMembers()) or 0
+  if rn and rn > 0 then
+    local i
+    for i = 1, rn do
+      local name = GetRaidRosterInfo(i)
+      if name and name ~= "" then set[name] = true end
+    end
+    return set, rn
   end
-  return set, n
+
+  -- party mode (includes player + party1..4)
+  local count = 0
+
+  local me = UnitName and UnitName("player")
+  if me and me ~= "" then
+    set[me] = true
+    count = count + 1
+  end
+
+  local pn = (GetNumPartyMembers and GetNumPartyMembers()) or 0
+  local i
+  for i = 1, pn do
+    local u = "party"..i
+    if UnitExists and UnitExists(u) then
+      local nm = UnitName(u)
+      if nm and nm ~= "" then
+        if not set[nm] then
+          set[nm] = true
+          count = count + 1
+        end
+      end
+    end
+  end
+
+  return set, count
 end
 
 -- Public notifier: call from the Roles module after updating TacticaDB.Tanks/Healers/DPS
