@@ -1000,7 +1000,46 @@ f:SetScript("OnEvent", function()
 
   if event == "PARTY_MEMBERS_CHANGED" or event == "PARTY_LEADER_CHANGED" then
     -- Party state changed: make sure SELF menu entries are correct now
+    EnsureDB()
     UpdateSelfMenuVisibility()
+
+    -- If we're NOT in a raid, keep party-only role state clean so nothing "sticks"
+    local inRaidNow  = UnitInRaid and UnitInRaid("player")
+    if not inRaidNow then
+      local pn = (GetNumPartyMembers and (GetNumPartyMembers() or 0)) or 0
+      local inPartyNow = (pn > 0) and true or false
+
+      if not inPartyNow then
+        -- Party ended (or we were kicked) -> clear everything so no stale roles remain
+        WipeRoles("left party")
+      else
+        -- Still in party: purge roles for anyone not currently in the party
+        local present = {}
+        local me = UnitName and UnitName("player")
+        if me and me ~= "" then present[me] = true end
+        for i=1,pn do
+          local u = "party"..i
+          if UnitExists and UnitExists(u) then
+            local nm = UnitName(u)
+            if nm and nm ~= "" then present[nm] = true end
+          end
+        end
+
+        for n in pairs(TacticaDB.Healers) do if not present[n] then TacticaDB.Healers[n] = nil end end
+        for n in pairs(TacticaDB.DPS)     do if not present[n] then TacticaDB.DPS[n]     = nil end end
+        for n in pairs(TacticaDB.Tanks)   do if not present[n] then TacticaDB.Tanks[n]   = nil end end
+
+        -- Keep pfUI tank flags aligned with the cleaned DB
+        Pfui_ReapplyAllTanks()
+
+        -- Refresh visuals
+        if type(Tactica_DecoratePartyFrames) == "function" then Tactica_DecoratePartyFrames() end
+        if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+      end
+    end
+
+    -- IMPORTANT: party changes should refresh Raid Builder preview
+    NotifyBuilder()
     return
   end
 
