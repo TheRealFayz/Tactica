@@ -95,7 +95,7 @@ if not INV._tick then
   end)
 end
 
--- === Raid conversion helpers ===
+-- === Group helpers (party + raid) ===
 
 local function IsNameInRaid(name)
   local n = (GetNumRaidMembers and GetNumRaidMembers()) or 0
@@ -104,6 +104,28 @@ local function IsNameInRaid(name)
     if nm and nm == name then return true end
   end
   return false
+end
+
+local function IsNameInParty(name)
+  if not name or name == "" then return false end
+
+  local me = UnitName and UnitName("player")
+  if me and me == name then return true end
+
+  local pn = (GetNumPartyMembers and GetNumPartyMembers()) or 0
+  for i=1,pn do
+    local u = "party"..i
+    if UnitExists and UnitExists(u) then
+      local nm = UnitName(u)
+      if nm and nm == name then return true end
+    end
+  end
+  return false
+end
+
+local function IsNameInGroup(name)
+  if IsNameInRaid(name) then return true end
+  return IsNameInParty(name)
 end
 
 local function RB() return TacticaRaidBuilder end
@@ -123,9 +145,28 @@ local function INV_IsActive()
   return false
 end
 
+-- Only convert to raid if the RB target size is > 5. If RB custom size is 5 or less, we must stay party.
+local function INV_ShouldConvertToRaid()
+  if not RBFrameShown() then
+    return false
+  end
+  local R = RB()
+  local size = (R and R.state and R.state.size) or 0
+  if size > 0 and size <= 5 then return false end
+  return true
+end
+
+
 local function TryConvertToRaid(reason, retries)
   retries = retries or 10
   if not INV._convertWhenFirstJoins then return end
+
+  -- If RB size is 5 or less, never convert.
+  if not INV_ShouldConvertToRaid() then
+    INV._convertWhenFirstJoins = false
+    INV._pendingReinvites = {}
+    return
+  end
 
   -- If not active, do NOT leak conversion behavior.
   if not INV_IsActive() then
@@ -145,7 +186,7 @@ local function TryConvertToRaid(reason, retries)
   -- If not even in a party yet, wait a bit (solo cannot convert directly)
   if partyN == 0 then
     if retries > 0 then
-      After(0.5, function() TryConvertToRaid("waiting-party:"..tostring(reason), retries-1) end)
+      After(0.5, function() TryConvertToRaid(reason, retries-1) end)
     end
     return
   end
@@ -158,15 +199,9 @@ local function TryConvertToRaid(reason, retries)
   else
     -- not leader yet; keep trying briefly
     if retries > 0 then
-      After(0.5, function() TryConvertToRaid("waiting-leader:"..tostring(reason), retries-1) end)
+      After(0.5, function() TryConvertToRaid(reason, retries-1) end)
     end
   end
-end
-
-local function RB() return TacticaRaidBuilder end
-local function RBFrameShown()
-  local R = RB()
-  return (R and R.frame and R.frame:IsShown()) and true or false
 end
 
 -- RB bridge
@@ -387,11 +422,19 @@ local function setRole(name, role)
   end
 end
 
--- hard refresh of visual tags
+-- hard refresh of visual tags (raid + party)
 local function refreshRolesUI()
   if type(Tactica_DecorateRaidRoster) == "function" then Tactica_DecorateRaidRoster() end
+  if type(Tactica_DecoratePartyFrames) == "function" then Tactica_DecoratePartyFrames() end
+  if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+
   if type(RaidFrame_Update) == "function" then RaidFrame_Update() end
   if type(RaidGroupFrame_Update) == "function" then RaidGroupFrame_Update() end
+
+  if type(PartyMemberFrame_Update) == "function" then
+    PartyMemberFrame_Update()
+  end
+
   if pfUI and pfUI.uf and pfUI.uf.raid and pfUI.uf.raid.Show then pfUI.uf.raid:Show() end
 end
 
@@ -518,6 +561,12 @@ end
 local function EnsureRaidMode(reason)
   local inRaid  = (GetNumRaidMembers  and GetNumRaidMembers()  or 0) > 0
   if inRaid then return true end
+
+  -- If RB size is 5 or less, never convert.
+  if not INV_ShouldConvertToRaid() then
+    INV._convertWhenFirstJoins = false
+    return false
+  end
 
   -- Don't arm conversion unless module is actually active (standalone or RB frame shown).
   if not INV_IsActive() then
@@ -744,7 +793,7 @@ end
 
 -- active (auto-invite) path
 local function handleActive(author, msg, keyword, autoAssign, rbMode)
-  if IsNameInRaid(author) then return end
+  if IsNameInGroup(author) then return end
   if INV._sessionIgnores[lower(author)] then return end
 
   local tokens, raw = tokenize(msg)
@@ -844,7 +893,7 @@ end
 
 -- RB confirm ask (auto-invite OFF, auto-assign ON)
 local function handleRBConfirmGearOnly(author, msg)
-  if IsNameInRaid(author) then return end
+  if IsNameInGroup(author) then return end
   if INV._sessionIgnores[lower(author)] then return end
   local tokens, _ = tokenize(msg)
   if not hasIntent(tokens) then return end
@@ -854,7 +903,7 @@ local function handleRBConfirmGearOnly(author, msg)
 end
 
 local function handleRBConfirmAsk(author, msg)
-  if IsNameInRaid(author) then return end
+  if IsNameInGroup(author) then return end
   if INV._sessionIgnores[lower(author)] then return end
 
   local tokens, _ = tokenize(msg)
@@ -1292,6 +1341,40 @@ local function onWhisperReply(author, msg)
   return true
 end
 
+local function FlushPendingRolesInGroup()
+  local inRaid = {}
+  local rn = (GetNumRaidMembers and GetNumRaidMembers()) or 0
+  for i=1,rn do
+    local nm = GetRaidRosterInfo(i)
+    if nm and nm ~= "" then inRaid[nm] = true end
+  end
+
+  local inParty = {}
+  local me = UnitName and UnitName("player")
+  if me and me ~= "" then inParty[me] = true end
+  local pn = (GetNumPartyMembers and GetNumPartyMembers()) or 0
+  for i=1,pn do
+    local u = "party"..i
+    if UnitExists and UnitExists(u) then
+      local nm = UnitName(u)
+      if nm and nm ~= "" then inParty[nm] = true end
+    end
+  end
+
+  for nm, role in pairs(INV.pendingRoles) do
+    if (inRaid[nm] or inParty[nm]) then
+      setRole(nm, role)
+
+      local let = ROLE_LET[role] or "?"
+      local rnm = ROLE_NAME[role] or role or "?"
+      say(nm, "[Tactica]: You are marked as '"..let.."' ("..rnm..") in the group list.")
+
+      INV.pendingRoles[nm] = nil
+      refreshRolesUI()
+    end
+  end
+end
+
 -- events
 INV._evt = CreateFrame("Frame")
 INV._evt:RegisterEvent("CHAT_MSG_WHISPER")
@@ -1327,35 +1410,30 @@ INV._evt:SetScript("OnEvent", function()
   elseif event == "CHAT_MSG_SYSTEM" then
     local sys = arg1 or ""
 
-    -- Try localized match first, then English fallback
     local who
     if ERR_ALREADY_IN_GROUP_S then
       local patt = string.gsub(ERR_ALREADY_IN_GROUP_S, "%%s", "(.+)")
       who = string.match(sys, patt)
     end
     if not who then
-      -- English fallback: "<name> is already in a group."
       who = string.match(sys, "^(.-) is already in a group%.?$")
     end
 
     if who and who ~= "" then
-      local name = cleanName(who)
+      local name  = cleanName(who)
       local lname = lower(name)
 
-      -- only send the "you're in a group" whisper once per player per session
       INV._groupWarned = INV._groupWarned or {}
       if not INV._groupWarned[lname] then
-        -- Only whisper this if auto-invite (standalone or RB) is active
         if INV.enabled or INV.rbEnabled then
           say(name, "[Tactica]: You are in group - please leave and write to me again.")
         end
         INV._groupWarned[lname] = true
       end
 
-      -- Always remember last invite for auto-retry (quietly)
       local ri = INV._recentInvite[lname]
       INV._groupRetry[lname] = {
-        untilT       = now() + AWAIT_SEC,            -- 90 seconds
+        untilT       = now() + AWAIT_SEC,
         role         = ri and ri.role or nil,
         doAssign     = ri and ri.doAssign or false,
         skipCapacity = ri and ri.skipCapacity or false,
@@ -1363,34 +1441,27 @@ INV._evt:SetScript("OnEvent", function()
     end
 
   elseif event == "PARTY_MEMBERS_CHANGED" or event == "PARTY_LEADER_CHANGED" then
-    TryConvertToRaid("roster-event", 6)
+    FlushPendingRolesInGroup()
+
+    if INV_ShouldConvertToRaid() then
+      TryConvertToRaid("roster-event", 6)
+    else
+      INV._convertWhenFirstJoins = false
+      INV._pendingReinvites = {}
+    end
 
   elseif event == "RAID_ROSTER_UPDATE" then
-    -- If become a raid, clear the flag and flush pending reinvites
     if (GetNumRaidMembers and (GetNumRaidMembers() or 0) > 0) then
       INV._convertWhenFirstJoins = false
-      -- process any invites held while converting
+
       local reinv = INV._pendingReinvites
       INV._pendingReinvites = {}
-      for _,pend in pairs(reinv) do
+      for _, pend in pairs(reinv) do
         inviteAndMaybeAssign(pend.name, pend.role, pend.doAssign, pend.skipCapacity)
       end
     end
 
-    local inRaid = {}
-    local n = (GetNumRaidMembers and GetNumRaidMembers()) or 0
-    for i=1,n do local nm = GetRaidRosterInfo(i); if nm and nm~="" then inRaid[nm]=true end end
-
-    for nm, role in pairs(INV.pendingRoles) do
-      if inRaid[nm] then
-        setRole(nm, role)
-        local let = ROLE_LET[role] or "?"
-        local rnm = ROLE_NAME[role] or role or "?"
-        say(nm, "[Tactica]: You are marked as '"..let.."' ("..rnm..") on the raid roster.")
-        INV.pendingRoles[nm] = nil
-        refreshRolesUI()
-      end
-    end
+    FlushPendingRolesInGroup()
   end
 end)
 

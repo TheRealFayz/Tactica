@@ -27,8 +27,9 @@ _Access all functionalities and commands via **Minimap Icon**_ (<img width="15" 
 <img width="492" height="327" alt="Tactica - Roster" src="https://github.com/user-attachments/assets/991708d0-b30d-402f-9eff-57cb767b9859" />
 <img width="322" height="145" alt="image" src="https://github.com/user-attachments/assets/708926de-70be-45ff-a640-c5ae77d6ab8c" />
 
-### 3. Build Raids (LFM poster/creator)
+### 3. Build Raids or Party (LFM poster/creator)
 - Select raid, size and setup and Tactica will do the rest. Creating a seamless LFM message, to post in your channels.
+- Select custom raid/size for any type of announcement (e.g. forming a party).
 - Choose number of SR (Soft Reserves), HR (Hard Reserves), Tanks, Healers, and whether you can Summon.
 - Select Yell, LFG or/and World to post in - set optional "Auto-announce".
 - Syncs with raid roster, so when you assign a role - the LFM announcement will adjust accordingly.

@@ -187,6 +187,44 @@ local function GetCurrentRole(name)
   return nil
 end
 
+local function FindUnitByName(name)
+  if not name or name == "" then return nil end
+
+  local me = UnitName and UnitName("player")
+  if me == name then return "player" end
+
+  local rn = (GetNumRaidMembers and GetNumRaidMembers()) or 0
+  if rn > 0 then
+    for i=1,rn do
+      local u = "raid"..i
+      if UnitExists and UnitExists(u) then
+        local nm = UnitName(u)
+        if nm == name then return u end
+      end
+    end
+  end
+
+  local pn = (GetNumPartyMembers and GetNumPartyMembers()) or 0
+  if pn > 0 then
+    for i=1,pn do
+      local u = "party"..i
+      if UnitExists and UnitExists(u) then
+        local nm = UnitName(u)
+        if nm == name then return u end
+      end
+    end
+  end
+
+  return nil
+end
+
+local function IsUnitOnlineByName(name)
+  local u = FindUnitByName(name)
+  if not u then return false end
+  if UnitIsConnected then return UnitIsConnected(u) and true or false end
+  return true -- fallback
+end
+
 -- suppress pfUI writes when click originated from pfUI's own Tank option
 local suppressPfuiWrite = false
 
@@ -386,7 +424,8 @@ end
 local menuInjected = false
 local function AddMenuButton()
   if menuInjected then return end
-  if not UnitPopupButtons or not UnitPopupMenus or not UnitPopupMenus["RAID"] then return end
+  if not UnitPopupButtons or not UnitPopupMenus then return end
+  if not UnitPopupMenus["RAID"] and not UnitPopupMenus["PARTY"] then return end
 
   -- buttons
   if not UnitPopupButtons[BUTTON_KEY_HEALER] then
@@ -403,18 +442,37 @@ local function AddMenuButton()
   -- Rule: only hide if BOTH pfUI and SuperWoW are present.
   local hideOurTank = (Tactica_hasPfUI and Tactica_hasSuperWoW)
 
-  local menu = UnitPopupMenus["RAID"]
-  local function ensureItem(key, insertIndex)
+  local function ensureItem(menu, key, insertIndex)
+    if not menu then return end
     local exists = false
     local n = table.getn(menu)
     for i = 1, n do if menu[i] == key then exists = true; break end end
     if not exists then table.insert(menu, insertIndex or 3, key) end
   end
 
-  -- Insert: Healer, DPS always. Tank only if not hidden by the rule above.
-  ensureItem(BUTTON_KEY_HEALER, 3)
-  ensureItem(BUTTON_KEY_DPS,    4)
-  if not hideOurTank then ensureItem(BUTTON_KEY_TANK, 5) end
+  -- Insert into RAID menu
+  do
+    local menu = UnitPopupMenus["RAID"]
+    ensureItem(menu, BUTTON_KEY_HEALER, 3)
+    ensureItem(menu, BUTTON_KEY_DPS,    4)
+    if not hideOurTank then ensureItem(menu, BUTTON_KEY_TANK, 5) end
+  end
+
+  -- Insert into PARTY menu (right-click party frames)
+  do
+    local menu = UnitPopupMenus["PARTY"]
+    ensureItem(menu, BUTTON_KEY_HEALER, 3)
+    ensureItem(menu, BUTTON_KEY_DPS,    4)
+    if not hideOurTank then ensureItem(menu, BUTTON_KEY_TANK, 5) end
+  end
+  
+  -- Insert into PLAYER menu (generic other-player unit menu)
+  do
+    local menu = UnitPopupMenus["PLAYER"]
+    ensureItem(menu, BUTTON_KEY_HEALER, 3)
+    ensureItem(menu, BUTTON_KEY_DPS,    4)
+    ensureItem(menu, BUTTON_KEY_TANK,   5)
+  end
 
   menuInjected = true
 end
@@ -424,7 +482,9 @@ local hookInstalled = false
 local function HandleMenuClick()
   if not this or not this.value then return end
   EnsureDB()
-  if not UnitInRaid("player") then return end
+  local inRaid  = UnitInRaid and UnitInRaid("player")
+  local inParty = (GetNumPartyMembers and (GetNumPartyMembers() or 0) > 0) and true or false
+  if (not inRaid) and (not inParty) then return end
 
   local dropdownFrame = getglobal(UIDROPDOWNMENU_INIT_MENU or "")
   if not dropdownFrame then return end
@@ -456,20 +516,32 @@ local function HandleMenuClick()
 
   if msg then
 	  if type(Tactica_DecorateRaidRoster) == "function" then Tactica_DecorateRaidRoster() end
+	  if type(Tactica_DecoratePartyFrames) == "function" then Tactica_DecoratePartyFrames() end
 	  (DEFAULT_CHAT_FRAME or ChatFrame1):AddMessage(string.format("|cff33ff99Tactica:|r %s is now %s.", name, msg))
 
+	  -- broadcast stays leader/assist only
 	  if IsSelfLeaderOrAssist() then
-		-- broadcast stays leader/assist only
 		if newRole == nil then
 		  Broadcast_Clear(name)
 		else
 		  Broadcast_Set(name, newRole)
 		end
+	  end
 
-		-- whisper is ALSO leader/assist only
-		if TacticaDB and TacticaDB.Settings and TacticaDB.Settings.RoleWhisperEnabled ~= false then
-		  local me = UnitName and UnitName("player") or nil
-		  if me and me ~= name and IsRaidMemberOnline(name) then
+	  -- whisper MUST be leader-only (raid: leader/assist, party: party leader)
+	  if not (TacticaDB and TacticaDB.Settings) then TacticaDB = TacticaDB or {}; TacticaDB.Settings = TacticaDB.Settings or {} end
+	  if TacticaDB.Settings.RoleWhisperEnabled ~= false then
+		local me = UnitName and UnitName("player") or nil
+		if me and me ~= name and IsUnitOnlineByName(name) then
+		  local inRaidNow = UnitInRaid and UnitInRaid("player")
+		  local canWhisper = false
+		  if inRaidNow then
+			canWhisper = IsSelfLeaderOrAssist() and true or false
+		  else
+			canWhisper = (IsPartyLeader and IsPartyLeader()) and true or false
+		  end
+
+		  if canWhisper then
 			local w
 			if newRole == "H" then
 			  w = "[Tactica]: You are marked as 'H' (Healer) on the raid roster."
@@ -532,6 +604,39 @@ local function BuildRoleTag(name)
   if TacticaDB.DPS[name]    then return "D" end
   if TacticaDB.Tanks[name]  then return "T" end
   return ""
+end
+
+------------------------------------------------------------
+-- Party frame decoration (T/H/D)
+------------------------------------------------------------
+local function GetPartyNameFS(i)
+  return getglobal("PartyMemberFrame"..i.."Name")
+end
+
+local function GetOrCreatePartyTag(frame)
+  if not frame then return nil end
+  if not frame.TacticaPartyRoleTag then
+    local fs = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    frame.TacticaPartyRoleTag = fs
+    frame.TacticaPartyRoleTag:SetTextColor(1,1,0)
+    frame.TacticaPartyRoleTag:SetJustifyH("RIGHT")
+    local fpath, fsize = frame.TacticaPartyRoleTag:GetFont()
+    if fpath and fsize then frame.TacticaPartyRoleTag:SetFont(fpath, math.max(8, fsize - 2)) end
+  end
+  return frame.TacticaPartyRoleTag
+end
+
+local function GetOrCreatePlayerTag()
+  if not PlayerFrame then return nil end
+  if not PlayerFrame.TacticaPlayerRoleTag then
+    local fs = PlayerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    PlayerFrame.TacticaPlayerRoleTag = fs
+    PlayerFrame.TacticaPlayerRoleTag:SetTextColor(1,1,0)
+    PlayerFrame.TacticaPlayerRoleTag:SetJustifyH("RIGHT")
+    local fpath, fsize = fs:GetFont()
+    if fpath and fsize then fs:SetFont(fpath, math.max(8, fsize - 2)) end
+  end
+  return PlayerFrame.TacticaPlayerRoleTag
 end
 
 local function GetOrCreateTag(btn)
@@ -640,6 +745,56 @@ local function InstallRosterHooks()
     local o2 = RaidGroupFrame_Update; RaidGroupFrame_Update = function() if o2 then o2() end; Tactica_DecorateRaidRoster() end
   end
 end
+
+local function InstallPartyHooks()
+  if type(PartyMemberFrame_UpdateMember) == "function" then
+    if type(hooksecurefunc) == "function" then
+      hooksecurefunc("PartyMemberFrame_UpdateMember", function()
+        if type(Tactica_DecoratePartyFrames) == "function" then Tactica_DecoratePartyFrames() end
+        if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+      end)
+    else
+      local o = PartyMemberFrame_UpdateMember
+      PartyMemberFrame_UpdateMember = function(...)
+        if o then o(unpack(arg)) end
+        if type(Tactica_DecoratePartyFrames) == "function" then Tactica_DecoratePartyFrames() end
+        if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+      end
+    end
+  end
+
+  if type(PartyMemberFrame_Update) == "function" then
+    if type(hooksecurefunc) == "function" then
+      hooksecurefunc("PartyMemberFrame_Update", function()
+        if type(Tactica_DecoratePartyFrames) == "function" then Tactica_DecoratePartyFrames() end
+        if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+      end)
+    else
+      local o2 = PartyMemberFrame_Update
+      PartyMemberFrame_Update = function(...)
+        if o2 then o2(unpack(arg)) end
+        if type(Tactica_DecoratePartyFrames) == "function" then Tactica_DecoratePartyFrames() end
+        if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+      end
+    end
+  end
+
+  -- PlayerFrame updates (keeps SELF tag fresh)
+  if type(PlayerFrame_Update) == "function" then
+    if type(hooksecurefunc) == "function" then
+      hooksecurefunc("PlayerFrame_Update", function()
+        if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+      end)
+    else
+      local op = PlayerFrame_Update
+      PlayerFrame_Update = function(...)
+        if op then op(unpack(arg)) end
+        if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+      end
+    end
+  end
+end
+
 InstallRosterHooks()
 
 ------------------------------------------------------------
@@ -742,6 +897,78 @@ SlashCmdList["TACTICACLEAR"] = function() TacticaRaidRoles_ClearAllRoles(false) 
 ------------------------------------------------------------
 -- Init & Events
 ------------------------------------------------------------
+
+-- forward-declare because AddMenuAndHooks calls these (Lua 5.0 local scope rules)
+local UpdateSelfMenuVisibility
+local InstallShowMenuHook
+
+-- one-time install guard (functions are not tables in Lua 5.0)
+local showMenuHookInstalled = false
+
+-- ensure SELF menu shows our items only while in PARTY (and NOT in raid)
+local function MenuHasKey(menu, key)
+  if not menu then return false end
+  for i=1, table.getn(menu) do
+    if menu[i] == key then return true end
+  end
+  return false
+end
+
+local function MenuRemoveKey(menu, key)
+  if not menu then return end
+  local i=1
+  while i <= table.getn(menu) do
+    if menu[i] == key then
+      table.remove(menu, i)
+    else
+      i = i + 1
+    end
+  end
+end
+
+local function MenuEnsureKey(menu, key, insertIndex)
+  if not menu then return end
+  if not MenuHasKey(menu, key) then
+    table.insert(menu, insertIndex or 3, key)
+  end
+end
+
+UpdateSelfMenuVisibility = function()
+  if not UnitPopupMenus then return end
+  local menu = UnitPopupMenus["SELF"]
+  if not menu then return end
+
+  local inRaid  = UnitInRaid and UnitInRaid("player")
+  local inParty = (GetNumPartyMembers and (GetNumPartyMembers() or 0) > 0) and true or false
+
+  if inParty and not inRaid then
+    -- ensure present in party (player frame)
+    MenuEnsureKey(menu, BUTTON_KEY_HEALER, 3)
+    MenuEnsureKey(menu, BUTTON_KEY_DPS,    4)
+    MenuEnsureKey(menu, BUTTON_KEY_TANK,   5)
+  else
+    -- remove when solo or in raid
+    MenuRemoveKey(menu, BUTTON_KEY_HEALER)
+    MenuRemoveKey(menu, BUTTON_KEY_DPS)
+    MenuRemoveKey(menu, BUTTON_KEY_TANK)
+  end
+end
+
+-- hook menu show so SELF menu visibility is correct per-context
+InstallShowMenuHook = function()
+  if showMenuHookInstalled then return end
+  showMenuHookInstalled = true
+
+  local orig = UnitPopup_ShowMenu
+  UnitPopup_ShowMenu = function(...)
+    -- Update entries right before menu is shown
+    UpdateSelfMenuVisibility()
+    if orig then
+      return orig(unpack(arg))
+    end
+  end
+end
+
 local function AddMenuAndHooks()
   EnsureDB()
   Tactica_DetectPfUI()
@@ -750,6 +977,8 @@ local function AddMenuAndHooks()
   OFFSET_BEFORE_NAME_ACTIVE = Tactica_hasPfUI and OFFSET_BEFORE_NAME_PFUI or OFFSET_BEFORE_NAME_DEFAULT
   AddMenuButton()
   InstallClickHook()
+  UpdateSelfMenuVisibility()
+  InstallShowMenuHook()
   Tactica_DecorateRaidRoster()
   Pfui_ReapplyAllTanks()
 end
@@ -761,10 +990,57 @@ f:RegisterEvent("VARIABLES_LOADED")
 f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("RAID_ROSTER_UPDATE")
+f:RegisterEvent("PARTY_MEMBERS_CHANGED")
+f:RegisterEvent("PARTY_LEADER_CHANGED")
 f:RegisterEvent("CHAT_MSG_ADDON")
 f:SetScript("OnEvent", function()
   if event == "CHAT_MSG_ADDON" then
     OnAddonMessage(); return
+  end
+
+  if event == "PARTY_MEMBERS_CHANGED" or event == "PARTY_LEADER_CHANGED" then
+    -- Party state changed: make sure SELF menu entries are correct now
+    EnsureDB()
+    UpdateSelfMenuVisibility()
+
+    -- If we're NOT in a raid, keep party-only role state clean so nothing "sticks"
+    local inRaidNow  = UnitInRaid and UnitInRaid("player")
+    if not inRaidNow then
+      local pn = (GetNumPartyMembers and (GetNumPartyMembers() or 0)) or 0
+      local inPartyNow = (pn > 0) and true or false
+
+      if not inPartyNow then
+        -- Party ended (or we were kicked) -> clear everything so no stale roles remain
+        WipeRoles("left party")
+      else
+        -- Still in party: purge roles for anyone not currently in the party
+        local present = {}
+        local me = UnitName and UnitName("player")
+        if me and me ~= "" then present[me] = true end
+        for i=1,pn do
+          local u = "party"..i
+          if UnitExists and UnitExists(u) then
+            local nm = UnitName(u)
+            if nm and nm ~= "" then present[nm] = true end
+          end
+        end
+
+        for n in pairs(TacticaDB.Healers) do if not present[n] then TacticaDB.Healers[n] = nil end end
+        for n in pairs(TacticaDB.DPS)     do if not present[n] then TacticaDB.DPS[n]     = nil end end
+        for n in pairs(TacticaDB.Tanks)   do if not present[n] then TacticaDB.Tanks[n]   = nil end end
+
+        -- Keep pfUI tank flags aligned with the cleaned DB
+        Pfui_ReapplyAllTanks()
+
+        -- Refresh visuals
+        if type(Tactica_DecoratePartyFrames) == "function" then Tactica_DecoratePartyFrames() end
+        if type(Tactica_DecoratePlayerFrame) == "function" then Tactica_DecoratePlayerFrame() end
+      end
+    end
+
+    -- IMPORTANT: party changes should refresh Raid Builder preview
+    NotifyBuilder()
+    return
   end
 
   if event == "RAID_ROSTER_UPDATE" then
